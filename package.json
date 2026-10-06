@@ -1,0 +1,14 @@
+{
+  "name": "brand-dna",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "serve": "npx --yes serve -l 8080 ."
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "fast-xml-parser": "^5.0.0"
+  }
+}
