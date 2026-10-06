@@ -10,6 +10,7 @@ import { positioningRules } from './analyze/positioning.mjs';
 import { rankCompetitors } from './analyze/competitors.mjs';
 import { buildPrompt, runAi, mergeCompetitors } from './analyze/ai.mjs';
 import { industries, resolveIndustry } from './industries.mjs';
+import { detectName, detectIndustry } from './detect.mjs';
 import { SCHEMA_VERSION } from '../shared/schema.js';
 
 export const defaultCollectors = {
@@ -30,16 +31,36 @@ async function safe(source, fn) {
 
 const meaningful = (v) => v != null && !(Array.isArray(v) && v.length === 0);
 
-export async function buildReport({ id, input, fetcher, now = new Date(), collectors = defaultCollectors, ai = null }) {
-  const website = input.website
-    ? await safe('website', () => collectors.website(input, { fetcher }))
-    : { source: 'website', ok: false, error: 'No website provided' };
+export async function buildReport({ id, input, fetcher, now = new Date(), collectors = defaultCollectors, ai = null, onProgress = null }) {
+  const emit = (event) => {
+    try {
+      onProgress?.(event);
+    } catch {}
+  };
+  const step = async (source, fn) => {
+    const result = await safe(source, fn);
+    emit({ type: 'progress', source, state: result.ok ? 'done' : 'failed' });
+    return result;
+  };
+
+  const website = await step('website', () =>
+    input.website ? collectors.website(input, { fetcher }) : { source: 'website', ok: false, error: 'No website provided' });
+  const site = website.ok ? website.data : null;
+  if (!input.name || !input.industry) {
+    input = {
+      ...input,
+      name: input.name || detectName(site, input.website),
+      industry: input.industry || industries[detectIndustry(site, industries)].label,
+    };
+  }
+  emit({ type: 'detected', name: input.name, industry: input.industry });
+
   const discovered = website.ok ? website.data.socialLinks : [];
   const [socials, news, community, competitors] = await Promise.all([
-    safe('socials', () => collectors.socials(input, { fetcher, discovered })),
-    safe('news', () => collectors.news(input, { fetcher, now })),
-    safe('community', () => collectors.community(input, { fetcher, now })),
-    safe('competitors', () => collectors.competitors(input, { fetcher })),
+    step('socials', () => collectors.socials(input, { fetcher, discovered })),
+    step('news', () => collectors.news(input, { fetcher, now })),
+    step('community', () => collectors.community(input, { fetcher, now })),
+    step('competitors', () => collectors.competitors(input, { fetcher })),
   ]);
 
   const items = dedupeMentions([...(news.ok ? news.data.items : []), ...(community.ok ? community.data.items : [])]);
@@ -48,7 +69,6 @@ export async function buildReport({ id, input, fetcher, now = new Date(), collec
 
   const industryKey = resolveIndustry(input.industry);
   const touchpoints = computeTouchpoints({ website, socials, websiteUrl: input.website, industryKey, table: industries });
-  const site = website.ok ? website.data : null;
   let positioning = positioningRules({ site, name: input.name });
   const ranked = rankCompetitors({
     name: input.name,
@@ -77,6 +97,8 @@ export async function buildReport({ id, input, fetcher, now = new Date(), collec
       modeReason = `AI analysis unavailable (${e.message}) — rules-based analysis.`;
     }
   }
+
+  emit({ type: 'progress', source: 'analysis', state: 'done' });
 
   const sources = [website, socials, news, community, competitors].map((r) => ({
     source: r.source,

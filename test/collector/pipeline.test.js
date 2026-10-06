@@ -86,3 +86,45 @@ test('AI failure falls back to rules with reason', async () => {
   assert.equal(r.mode, 'rules');
   assert.match(r.modeReason, /HTTP 529/);
 });
+
+test('fills empty name and industry from the website and reports progress', async () => {
+  const events = [];
+  const seen = {};
+  const { collectors } = fakes();
+  const site = (await collectors.website(input)).data;
+  collectors.website = async () => ({ source: 'website', ok: true, data: { ...site, description: 'Software platform for remote teams.' } });
+  collectors.news = async (inp) => { seen.news = inp.name; return { source: 'news', ok: false, error: 'x' }; };
+  const r = await buildReport({ id: 'i'.repeat(22), input: { ...input, name: '', industry: '' }, now, collectors, fetcher: null, onProgress: (e) => events.push(e) });
+  assert.equal(r.input.name, 'Acme');
+  assert.equal(r.input.industry, 'SaaS / Software');
+  assert.equal(r.industryKey, 'saas');
+  assert.equal(seen.news, 'Acme', 'later collectors search for the detected name');
+  assert.deepEqual(events[0], { type: 'progress', source: 'website', state: 'done' });
+  assert.deepEqual(events[1], { type: 'detected', name: 'Acme', industry: 'SaaS / Software' });
+  assert.deepEqual(events.find((e) => e.source === 'news'), { type: 'progress', source: 'news', state: 'failed' });
+  assert.deepEqual(events.filter((e) => e.type === 'progress').map((e) => e.source).sort(), ['analysis', 'community', 'competitors', 'news', 'socials', 'website']);
+  assert.equal(events.at(-1).source, 'analysis');
+});
+
+test('user-entered name and industry win over detection', async () => {
+  const { collectors } = fakes();
+  const r = await buildReport({ id: 'i'.repeat(22), input: { ...input, name: 'ACME Corp', industry: 'E-commerce / Retail' }, now, collectors, fetcher: null });
+  assert.equal(r.input.name, 'ACME Corp');
+  assert.equal(r.input.industry, 'E-commerce / Retail');
+});
+
+test('unreachable website: name falls back to the domain, industry to Other', async () => {
+  const { collectors } = fakes({ website: async () => ({ source: 'website', ok: false, error: 'HTTP 500' }) });
+  const events = [];
+  const r = await buildReport({ id: 'i'.repeat(22), input: { ...input, name: '', industry: '' }, now, collectors, fetcher: null, onProgress: (e) => events.push(e) });
+  assert.equal(r.status, 'ok');
+  assert.equal(r.input.name, 'Acme');
+  assert.equal(r.input.industry, 'Other');
+  assert.deepEqual(events[0], { type: 'progress', source: 'website', state: 'failed' });
+});
+
+test('a throwing onProgress never breaks the report', async () => {
+  const { collectors } = fakes();
+  const r = await buildReport({ id: 'i'.repeat(22), input, now, collectors, fetcher: null, onProgress: () => { throw new Error('ui gone'); } });
+  assert.equal(r.status, 'ok');
+});
