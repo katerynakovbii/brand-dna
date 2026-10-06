@@ -35,7 +35,7 @@ test('startAnalysis: invalid inputs â†’ errors, no dispatch; dispatch failure â†
   let called = false;
   const bad = await startAnalysis({ inputs: { name: '' }, github: { dispatch: async () => { called = true; } }, library, publicJwk: keys.publicJwk });
   assert.equal(bad.ok, false);
-  assert.ok(bad.errors.name);
+  assert.ok(bad.errors.website);
   assert.equal(called, false);
   await assert.rejects(startAnalysis({ inputs: { name: 'A', website: 'a.com', industry: 'x' }, github: { dispatch: async () => { throw new TokenRejectedError(); } }, library, publicJwk: keys.publicJwk }), TokenRejectedError);
   assert.deepEqual(library.list(), []);

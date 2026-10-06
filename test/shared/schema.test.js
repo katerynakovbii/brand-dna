@@ -31,9 +31,9 @@ test('validateInputs accepts a full main request', () => {
 });
 
 test('validateInputs reports field errors', () => {
-  const r = validateInputs({ name: '', website: 'javascript:alert(1)', industry: '', socials: { x: 'nope nope' } });
+  const r = validateInputs({ name: '', website: 'javascript:alert(1)', industry: 'x'.repeat(61), socials: { x: 'nope nope' } });
   assert.equal(r.ok, false);
-  assert.deepEqual(Object.keys(r.errors).sort(), ['industry', 'name', 'website', 'x']);
+  assert.deepEqual(Object.keys(r.errors).sort(), ['industry', 'website', 'x']);
   assert.equal(validateInputs({ name: 'A', industry: 'x' }).errors.website, 'Enter the website.');
   assert.match(validateInputs({ name: 'x'.repeat(101), website: 'a.com', industry: 'x' }).errors.name, /too long/);
 });
@@ -68,5 +68,17 @@ test('normalizeWebsite rejects hosts with empty labels', () => {
 test('validateInputs tolerates null input', () => {
   const r = validateInputs(null);
   assert.equal(r.ok, false);
-  assert.ok(r.errors.name);
+  assert.ok(r.errors.website);
+});
+
+test('main analysis needs only a website', () => {
+  const v = validateInputs({ website: 'acme.com' });
+  assert.equal(v.ok, true);
+  assert.equal(v.value.name, '');
+  assert.equal(v.value.industry, '');
+});
+
+test('competitor analysis still needs a name', () => {
+  const v = validateInputs({ website: 'b.com', type: 'competitor', parentId: 'p'.repeat(22) });
+  assert.equal(v.errors.name, 'Enter the company name.');
 });
