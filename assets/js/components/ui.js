@@ -50,20 +50,73 @@ export function scoreRing(score, { size = 96 } = {}) {
 
 export const notice = (message, tone = 'info') => h('div', { class: `notice notice-${tone}`, role: 'status' }, message);
 
-export function errorBox(message, { actionsUrl = null } = {}) {
+export function errorBox(message, { onRetry = null } = {}) {
   return h('div', { class: 'notice notice-error', role: 'alert' },
     h('p', { text: message }),
-    actionsUrl ? h('p', {}, h('a', { href: actionsUrl, text: 'Open the analysis runs on GitHub' })) : null);
+    onRetry ? h('p', {}, button('Try again', { primary: true, onClick: onRetry })) : null);
 }
 
-export function runningCard({ name, actionsUrl, startedAt } = {}) {
-  return card({ title: name ? `Analyzing ${name}…` : 'Analyzing…', className: 'running' },
-    h('div', { class: 'running-row' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }),
-      h('p', { text: 'Collecting public data. This usually takes about 2 minutes; the page updates by itself.' })),
-    Number.isFinite(new Date(startedAt ?? NaN).getTime())
-      ? h('p', { class: 'muted', text: `Started ${new Date(startedAt).toLocaleTimeString()}.` })
-      : null,
-    actionsUrl ? h('p', {}, h('a', { href: actionsUrl, text: 'Watch the run on GitHub' })) : null);
+const PROGRESS_LABELS = {
+  website: 'Website', socials: 'Social profiles', news: 'News',
+  community: 'Community', competitors: 'Competitors', analysis: 'Analysis',
+};
+const PROGRESS_STAGES = [['website'], ['socials', 'news', 'community', 'competitors'], ['analysis']];
+const PROGRESS_ICONS = { pending: '○', running: '', done: '✓', failed: '✕' };
+const FINAL = new Set(['done', 'failed']);
+
+// Live checklist of the analysis sources. The first unfinished stage shows as running.
+export function progressList() {
+  const states = Object.fromEntries(Object.keys(PROGRESS_LABELS).map((k) => [k, 'pending']));
+  const rows = {};
+  const el = h('ul', { class: 'progress-list', 'aria-live': 'polite' },
+    ...Object.entries(PROGRESS_LABELS).map(([key, label]) => {
+      rows[key] = { li: h('li'), label };
+      return rows[key].li;
+    }));
+  function render() {
+    const stage = PROGRESS_STAGES.find((keys) => keys.some((k) => !FINAL.has(states[k]))) ?? [];
+    for (const [key, { li, label }] of Object.entries(rows)) {
+      const state = !FINAL.has(states[key]) && stage.includes(key) ? 'running' : states[key];
+      li.className = `progress-${state}`;
+      li.setAttribute('aria-label', `${label}: ${state}`);
+      li.replaceChildren(
+        state === 'running' ? h('span', { class: 'spinner', 'aria-hidden': 'true' }) : h('span', { class: 'progress-icon', 'aria-hidden': 'true', text: PROGRESS_ICONS[state] }),
+        h('span', { text: label }));
+    }
+  }
+  render();
+  return {
+    el,
+    update(source, state) {
+      if (!(source in states) || !FINAL.has(state)) return;
+      states[source] = state;
+      render();
+    },
+  };
+}
+
+export function toast(message, host = document.body, { ms = 2500 } = {}) {
+  const el = h('div', { class: 'toast', role: 'status', text: message });
+  host.append(el);
+  setTimeout(() => el.remove(), ms);
+  return el;
+}
+
+export function menuButton(label, items = []) {
+  const menu = h('div', { class: 'menu-list', role: 'menu', hidden: true });
+  const trigger = h('button', { type: 'button', class: 'btn', 'aria-haspopup': 'true', 'aria-expanded': 'false', text: `${label} ▾` });
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    trigger.setAttribute('aria-expanded', String(open));
+  };
+  trigger.addEventListener('click', () => setOpen(menu.hidden));
+  for (const item of items) {
+    menu.append(h('button', { type: 'button', role: 'menuitem', class: 'menu-item', text: item.label,
+      onClick: () => { setOpen(false); item.onClick?.(); } }));
+  }
+  const wrap = h('div', { class: 'menu' }, trigger, menu);
+  wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape') { setOpen(false); trigger.focus(); } });
+  return wrap;
 }
 
 export function downloadBar(buttons = []) {

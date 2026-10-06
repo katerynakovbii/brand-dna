@@ -1,52 +1,26 @@
-import { createLibrary, safeStorage } from './library.js';
-import { createSettings } from './settings.js';
-import { repoFromLocation, createGithub, fetchPublicReport, actionsUrlFor } from './github.js';
+import { runAnalysis } from './api.js';
+import { createShareLink, loadShared } from './share.js';
 
+// Everything views need from the outside world, in one injectable object.
 export function createContext({
-  loc = globalThis.location,
-  override = null,
+  library,
   fetchImpl = (...a) => globalThis.fetch(...a),
-  storage = safeStorage(),
-  navigate = (hash) => { loc.hash = hash; },
+  navigate = (hash) => { globalThis.location.hash = hash; },
   rerender = () => {},
+  origin = globalThis.location?.origin,
 } = {}) {
-  const library = createLibrary(storage);
-  const settings = createSettings(storage);
-  const repo = repoFromLocation(loc, override);
-  const token = settings.getToken();
-  const github = repo && token ? createGithub({ ...repo, token, fetchImpl }) : null;
-  const pageBase = new URL('.', loc.href).href;
-
-  const getJson = async (path, missing) => {
-    const res = await fetchImpl(new URL(path, pageBase).href, { cache: 'no-cache' });
-    if (!res.ok) throw new Error(missing);
-    return res.json();
-  };
-  let jwk;
   let table;
-
   return {
     library,
-    settings,
-    repo,
-    github,
-    hasToken: !!token,
-    actionsUrl: repo ? actionsUrlFor(repo) : null,
-    fetchText: async (id) => {
-      const pub = () => fetchPublicReport({ id, ...repo, pageBase, fetchImpl });
-      if (!github) return pub();
-      try {
-        return await github.fetchReport(id);
-      } catch (e) {
-        // An expired or invalid stored token must not block public shared links.
-        if (e?.name === 'TokenRejectedError') return pub();
-        throw e;
-      }
-    },
-    publicJwk: () =>
-      (jwk ??= getJson('keys/workflow-public.jwk', 'Setup incomplete: keys/workflow-public.jwk is missing. Run scripts/setup.mjs (see README).')),
-    industries: () => (table ??= getJson('collector/industries.json', 'Could not load the industry list.')),
     navigate,
     rerender,
+    toastHost: globalThis.document?.body,
+    industries: () => (table ??= fetchImpl('/collector/industries.json')
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error('Could not load the industry list.'))))
+      .catch((e) => { table = null; throw e; })),
+    runAnalysis: (args) => runAnalysis({ ...args, fetchImpl }),
+    createShareLink: (report) => createShareLink(report, { fetchImpl, origin }),
+    loadShared: (id, key) => loadShared(id, key, { fetchImpl }),
+    copy: (text) => globalThis.navigator.clipboard.writeText(text),
   };
 }

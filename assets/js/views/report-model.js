@@ -1,5 +1,4 @@
 import { STATUS_LABELS, SOURCE_LABELS, kindLabel, safeHref, displayHost, formatDate, mentionsLabel } from '../format.js';
-import { REPORT_ID_RE, REPORT_KEY_RE } from '../../../shared/schema.js';
 
 const TONES = { live: 'ok', found: 'ok', unverified: 'warn', broken: 'bad', missing: 'muted' };
 
@@ -7,8 +6,6 @@ const isObj = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 const lookup = (map, k) => (typeof k === 'string' && Object.hasOwn(map, k) ? map[k] : null);
 const str = (x) => (x == null ? '' : String(x));
 const objs = (x) => (Array.isArray(x) ? x.filter(isObj) : []);
-
-export const validLink = (id, key) => REPORT_ID_RE.test(id ?? '') && REPORT_KEY_RE.test(key ?? '');
 
 export function touchpointRows(touchpoints) {
   return objs(touchpoints?.items).map((i) => {
@@ -51,10 +48,12 @@ export function sourceRows(sources) {
   }));
 }
 
-export function competitorRows({ report, library, hasToken }) {
+// `existing` is the library's entry list; a competitor counts as analyzed once a successful run is saved for this report.
+export function competitorRows({ report, existing = [] }) {
   const list = Array.isArray(report?.competitors) ? report.competitors : [];
+  const entries = objs(existing);
   return list.filter((c) => isObj(c) && typeof c.name === 'string').map((c) => {
-    const existing = library.findCompetitor(report.id, c.name);
+    const name = c.name.trim().toLowerCase();
     const href = safeHref(c.website);
     return {
       name: c.name,
@@ -62,8 +61,7 @@ export function competitorRows({ report, library, hasToken }) {
       host: href ? displayHost(href) : '',
       reason: typeof c.reason === 'string' ? c.reason : '',
       coMentions: c.coMentions,
-      existing,
-      action: existing ? 'open' : hasToken ? 'compare' : 'disabled',
+      existing: entries.find((e) => e.type === 'competitor' && e.parentId === report.id && e.status !== 'failed' && str(e.name).trim().toLowerCase() === name) ?? null,
     };
   });
 }

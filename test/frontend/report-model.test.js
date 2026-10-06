@@ -1,11 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { touchpointRows, mentionsView, sourceRows, competitorRows, competitorInputs, validLink } from '../../assets/js/views/report-model.js';
-import { createLibrary, safeStorage } from '../../assets/js/library.js';
-import { memStorage } from '../helpers/mem-storage.js';
-
-// safeStorage calls its getter on every access, so hand it one shared instance.
-const memStore = (initial) => { const m = memStorage(initial); return safeStorage(() => m); };
+import { touchpointRows, mentionsView, sourceRows, competitorRows, competitorInputs } from '../../assets/js/views/report-model.js';
 
 const win = (days, total, extra = {}) => ({ days, total, capped: false, bySource: {}, top: [], weekly: [], ...extra });
 
@@ -50,19 +45,20 @@ test('sourceRows', () => {
   ]);
 });
 
-test('competitorRows decides the action', () => {
-  const library = createLibrary(memStore());
+test('competitorRows links competitors already analyzed for this report', () => {
   const report = { id: 'P'.repeat(22), status: 'ok', competitors: [
     { name: 'Asana', website: 'https://asana.com', reason: 'r', coMentions: 3 },
     { name: 'Trello', website: null, reason: 'r2', coMentions: 1 },
   ] };
-  library.upsert({ reportId: 'C'.repeat(22), reportKey: 'k'.repeat(43), name: 'Asana', type: 'competitor', parentId: report.id, createdAt: '2026-10-06T00:00:00Z', status: 'ok' });
-  const withToken = competitorRows({ report, library, hasToken: true });
-  assert.equal(withToken[0].action, 'open');
-  assert.equal(withToken[0].existing.reportId, 'C'.repeat(22));
-  assert.equal(withToken[0].host, 'asana.com');
-  assert.equal(withToken[1].action, 'compare');
-  assert.equal(competitorRows({ report, library, hasToken: false })[1].action, 'disabled');
+  const existing = [
+    { id: 'C'.repeat(22), name: 'asana', type: 'competitor', parentId: report.id, status: 'ok' },
+    { id: 'D'.repeat(22), name: 'Trello', type: 'competitor', parentId: 'X'.repeat(22), status: 'ok' },
+  ];
+  const rows = competitorRows({ report, existing });
+  assert.equal(rows[0].existing.id, 'C'.repeat(22));
+  assert.equal(rows[0].host, 'asana.com');
+  assert.equal(rows[1].existing, null);
+  assert.equal(competitorRows({ report, existing: [{ ...existing[0], status: 'failed' }] })[0].existing, null);
 });
 
 test('competitorInputs inherits the parent industry', () => {
@@ -70,14 +66,6 @@ test('competitorInputs inherits the parent industry', () => {
   assert.deepEqual(competitorInputs(report, { name: 'Trello', website: null }), {
     name: 'Trello', website: '', industry: 'SaaS / Software', socials: {}, type: 'competitor', parentId: 'P'.repeat(22),
   });
-});
-
-test('validLink checks id and key shape', () => {
-  assert.equal(validLink('P'.repeat(22), 'k'.repeat(43)), true);
-  assert.equal(validLink('short', 'k'.repeat(43)), false);
-  assert.equal(validLink('P'.repeat(22), 'k'.repeat(42)), false);
-  assert.equal(validLink('P'.repeat(22), 'k'.repeat(42) + '+'), false);
-  assert.equal(validLink(undefined, null), false);
 });
 
 test('touchpointRows tolerates malformed data', () => {
@@ -112,15 +100,14 @@ test('sourceRows tolerates malformed data', () => {
 });
 
 test('competitorRows tolerates malformed data', () => {
-  const library = createLibrary(memStore());
-  assert.deepEqual(competitorRows({ report: null, library, hasToken: true }), []);
-  assert.deepEqual(competitorRows({ report: { id: 'P'.repeat(22), competitors: 'x' }, library, hasToken: true }), []);
-  const rows = competitorRows({ report: { id: 'P'.repeat(22), competitors: [null, { name: 5 }, { name: 'Ok', website: 'javascript:x', reason: 3 }] }, library, hasToken: true });
+  assert.deepEqual(competitorRows({ report: null }), []);
+  assert.deepEqual(competitorRows({ report: { id: 'P'.repeat(22), competitors: 'x' }, existing: 'x' }), []);
+  const rows = competitorRows({ report: { id: 'P'.repeat(22), competitors: [null, { name: 5 }, { name: 'Ok', website: 'javascript:x', reason: 3 }] }, existing: [null] });
   assert.equal(rows.length, 1);
   assert.equal(rows[0].href, null);
   assert.equal(rows[0].host, '');
   assert.equal(rows[0].reason, '');
-  assert.equal(rows[0].action, 'compare');
+  assert.equal(rows[0].existing, null);
 });
 
 test('competitorInputs tolerates missing industry', () => {
