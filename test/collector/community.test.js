@@ -82,3 +82,50 @@ test('excludes items with non-http(s) urls', async () => {
     'https://www.reddit.com/r/pm/comments/1/x/',
   ]);
 });
+
+test('reddit permalinks are pinned to reddit.com', async () => {
+  const fetcher = fakeFetcher([
+    [/hn\.algolia\.com/, { body: JSON.stringify({ nbHits: 0, hits: [] }) }],
+    [/reddit\.com\/search\.json/, { body: JSON.stringify({
+      data: {
+        children: [
+          { data: { title: 'Normal', permalink: '/r/test/comments/1/x/', created_utc: ts('2026-10-02T00:00:00Z') } },
+          { data: { title: 'Host takeover @', permalink: '@evil.com/x', created_utc: ts('2026-10-02T00:00:00Z') } },
+          { data: { title: 'Subdomain takeover .', permalink: '.evil.com/x', created_utc: ts('2026-10-02T00:00:00Z') } },
+          { data: { title: 'Missing', permalink: null, created_utc: ts('2026-10-02T00:00:00Z') } },
+        ],
+      },
+    }) }],
+  ]);
+  const r = await collectCommunity({ name: 'test' }, { fetcher, now });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.items.length, 1);
+  assert.equal(r.data.items[0].title, 'Normal');
+  assert.equal(r.data.items[0].url, 'https://www.reddit.com/r/test/comments/1/x/');
+});
+
+test('malformed hits are skipped without crashing', async () => {
+  const fetcher = fakeFetcher([
+    [/hn\.algolia\.com/, { body: JSON.stringify({
+      nbHits: 3,
+      hits: [
+        { objectID: '301', created_at_i: ts('2026-10-01T00:00:00Z'), title: 'Good' },
+        { title: 'Missing objectID', created_at_i: ts('2026-10-01T00:00:00Z') },
+        { objectID: '302', created_at_i: 'not-a-number', title: 'Bad timestamp' },
+      ],
+    }) }],
+    [/reddit\.com\/search\.json/, { body: JSON.stringify({
+      data: {
+        children: [
+          { data: { title: 'Good', permalink: '/r/test/x/', created_utc: ts('2026-10-02T00:00:00Z') } },
+          { data: { title: 'Bad timestamp', permalink: '/r/test/y/', created_utc: 'not-a-number' } },
+          { data: { title: 'NaN created_utc', permalink: '/r/test/z/', created_utc: NaN } },
+        ],
+      },
+    }) }],
+  ]);
+  const r = await collectCommunity({ name: 'test' }, { fetcher, now });
+  assert.equal(r.ok, true);
+  assert.equal(r.data.items.length, 2);
+  assert.deepEqual(r.data.items.map((i) => i.title), ['Good', 'Good']);
+});
