@@ -1,11 +1,11 @@
 # Brand DNA — Design Spec
 
 Date: 2026-10-06
-Status: Draft for review
+Status: Draft for review (rev 2 — no login, private-link reports)
 
 ## 1. Purpose
 
-A password-protected web app, hosted free on GitHub Pages, that analyzes how a brand appears online and identifies its competitors.
+A web app, hosted free on GitHub Pages, that analyzes how a brand appears online and identifies its competitors. Each report is confidential to whoever ran it (and anyone they share its private link with).
 
 **Inputs:** company name, website, industry, social profile URLs.
 
@@ -16,39 +16,43 @@ A password-protected web app, hosted free on GitHub Pages, that analyzes how a b
 - Competitors — top 5 likely competitors inferred from online presence, each with an on-demand full analysis and side-by-side comparison.
 - Downloadable as PDF, JSON and CSV.
 
-**Users:** the owner and a small team sharing one set of credentials. Not a public SaaS. Reports are generated on demand; no scheduled monitoring in v1.
+**Users:** the owner and a small team. Not a public SaaS. No login in this iteration. Reports generated on demand; no scheduled monitoring.
 
 **Success criteria:**
-- A user logs in, submits a brand, and sees a complete report within ~3 minutes.
-- Without the password, nobody can read reports or trigger analyses, even with full access to the public repo.
+- A user submits a brand and sees a complete report within ~3 minutes.
+- Without a report's private link, nobody can read it — even with full access to the public repo and its public Actions logs. Outsiders cannot tell which brands were analyzed.
+- Only devices holding a GitHub token can start analyses.
 - Runs at zero cost (AI step optional, ~1–5¢ per report when enabled).
 - Any single data source failing still yields a report with the gap disclosed.
 
 ## 2. Constraints
 
 - **Static hosting only (GitHub Pages).** No server. Browser cannot scrape third-party sites (CORS).
-- **Free GitHub plan ⇒ public repo.** Everything committed is world-readable, so all sensitive data must be encrypted at rest.
+- **Free GitHub plan ⇒ public repo.** Repo contents and Actions logs are world-readable, so inputs and reports must be encrypted.
 - **Free data sources.** No paid APIs required. Optional AI key.
 
 ## 3. Architecture
 
-Two halves sharing one crypto module:
+Two halves sharing one crypto module (WebCrypto, available in browsers and Node 24):
 
 ```
-Browser (GitHub Pages)                      GitHub Actions (Node 24)
-──────────────────────                      ────────────────────────
-login: user+pass → AES key
-  decrypt token.enc → GitHub PAT (memory only)
+Browser (GitHub Pages)                         GitHub Actions (Node 24)
+──────────────────────                         ────────────────────────
+Settings: GitHub PAT (localStorage)
 form: name, site, socials, industry
-  encrypt payload ───── workflow_dispatch ──▶ analyze.yml
-                         (input: ciphertext)     decrypt w/ secret BRAND_PASSPHRASE
-                                                 collectors (parallel)
-                                                 analyzer: rules → (+AI if key)
-                                                 encrypt → reports/<id>.enc
-                                                 update reports/index.enc, commit
-poll reports/index.enc (contents API) ◀── committed to main
-decrypt → render report
-"Compare" → dispatch competitor run → compare view
+reportId = random; reportKey = random AES-256
+payload = {inputs, reportKey}
+  encrypt payload to workflow public key
+  ──── workflow_dispatch(reportId, payload) ──▶ analyze.yml
+                                                  decrypt payload (secret WORKFLOW_PRIVATE_KEY)
+                                                  collectors (parallel)
+                                                  analyzer: rules → (+AI if key)
+                                                  encrypt report with reportKey
+                                                  commit reports/<reportId>.enc
+save {reportId, reportKey, name, date} locally
+poll reports/<reportId>.enc (contents API) ◀──── committed to main
+decrypt with reportKey → render
+private link: #/report/<reportId>?k=<reportKey>
 ```
 
 **Stack:** plain HTML + ES modules + one CSS file, no build step, no framework. Collector: Node 24, minimal deps (`cheerio` for HTML parsing, `fast-xml-parser` for RSS). Tests: `node --test`.
@@ -61,40 +65,42 @@ assets/
   app.css                  styles (incl. print stylesheet)
   js/
     main.js                router + bootstrap
-    auth.js                login, session key, token unlock
-    github.js              workflow dispatch, fetch encrypted files
-    views/                 login.js, dashboard.js, new.js, report.js, compare.js
+    library.js             local report library (localStorage): list, add, remove, export, import
+    settings.js            GitHub PAT storage + validation
+    github.js              workflow dispatch, fetch encrypted reports (API or Pages)
+    views/                 dashboard.js, new.js, report.js, compare.js, settings.js
     components/            cards, sparkline (SVG), score ring (SVG)
     export.js              JSON / CSV / print-PDF
 shared/
-  crypto.js                PBKDF2 + AES-GCM; runs in browser and Node
+  crypto.js                RSA-OAEP hybrid + AES-GCM; runs in browser and Node
   schema.js                report shape + validators
 collector/
-  run.mjs                  entrypoint (decrypt input → collect → analyze → encrypt → write)
+  run.mjs                  entrypoint (decrypt payload → collect → analyze → encrypt → write)
   collectors/              website.mjs, socials.mjs, news.mjs, community.mjs, competitors.mjs
   analyze/                 dedupe.mjs, windows.mjs, touchpoints.mjs, positioning.mjs,
                            competitors.mjs, ai.mjs
   safeFetch.mjs            timeout, UA, private-IP block, http(s) only
   industries.json          industry → keywords, expected touchpoints
 scripts/
-  setup.mjs                one-time: creates token.enc
-token.enc                  encrypted GitHub PAT
+  setup.mjs                one-time: generates workflow key pair
+keys/
+  workflow-public.jwk      committed public key
 reports/
-  index.enc                encrypted list of reports
-  <id>.enc                 encrypted report
+  <reportId>.enc           encrypted reports (random names, no index)
 .github/workflows/analyze.yml
 test/                      unit tests + fixtures
 ```
 
 ## 4. Security model
 
-- **Key derivation:** `key = PBKDF2-SHA256(password, salt = "brand-dna:" + username, 600 000 iterations) → AES-256-GCM`. Username acts as part of the salt; each encrypted blob additionally has a random 16-byte salt and 12-byte IV, stored as `{v:1, salt, iv, ct}` (base64) JSON.
-- **Passphrase string** used everywhere = `username + ":" + password`. The same string is stored as the GitHub secret `BRAND_PASSPHRASE`.
-- **token.enc:** fine-grained PAT scoped to this repo only, permissions `Actions: read & write` (dispatch, run status) and `Contents: read` (fetch encrypted reports via API). Created by `scripts/setup.mjs`.
-- **Login:** success = `token.enc` decrypts. Wrong credentials → AES-GCM auth failure → "Invalid credentials". Derived key held in `sessionStorage` (exported raw key) so closing the tab logs out; PAT only in memory, re-derived on reload from the session key.
-- **Workflow inputs are encrypted** (inputs appear in Actions logs). The workflow never logs decrypted input.
-- **Reports at rest** are encrypted with the passphrase. Repo visitors see only ciphertext and timestamps.
-- **Rotating password:** change secret, re-run `setup.mjs`. Old reports remain encrypted under the old passphrase; `setup.mjs --reencrypt <old>` re-encrypts them.
+- **Workflow key pair:** RSA-OAEP 3072, SHA-256. Generated by `scripts/setup.mjs`. Public key committed as `keys/workflow-public.jwk`; private key stored as GitHub secret `WORKFLOW_PRIVATE_KEY` (JWK JSON).
+- **Request encryption (hybrid):** browser generates a one-time AES-256-GCM key, encrypts the payload JSON with it, wraps that key with the workflow public key. Wire format: `{v:1, wk, iv, ct}` (base64url). Payload = `{inputs, reportKey, type, parentId}`. Actions logs show only ciphertext and the random `reportId`.
+- **Report encryption:** AES-256-GCM with `reportKey` (random 32 bytes from `crypto.getRandomValues`, base64url). File format `{v:1, iv, ct}`.
+- **reportId:** 16 random bytes, base64url. No brand name in filenames, commit messages (`report: <reportId>`), or anywhere public. No public index.
+- **Private link:** `https://<pages>/#/report/<reportId>?k=<reportKey>`. The fragment never leaves the browser (not sent to GitHub Pages or the API).
+- **Local library:** `localStorage["brand-dna:library"]` = `[{reportId, reportKey, name, type, parentId, createdAt, status}]`. Export → JSON file; Import → merges. Opening a private link adds the report to the library.
+- **GitHub PAT:** fine-grained, this repo only, `Actions: read & write` + `Contents: read`. Entered in Settings, stored in `localStorage` on that device only. Never committed. Without a PAT the app is read-only (can open private links, cannot start analyses).
+- **Threats accepted for v1:** anyone with a link can read that report (by design); anyone with device access can read its localStorage; a leaked PAT lets someone start runs (revocable); reports cannot be deleted from git history (ciphertext only).
 - **Downloads are plaintext** by design; UI notes this.
 
 ## 5. Collectors
@@ -115,7 +121,7 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 
 - **Dedupe:** by normalized URL, then by title similarity (token Jaccard ≥ 0.8).
 - **Windows:** mentions bucketed into 7 / 30 / 60 days relative to run time. Per window: total, per-source counts, top 10 headlines (newest first), weekly counts for sparkline. If any source hit its cap, total is marked `capped: true` → "100+".
-- **Touchpoints:** checklist of website, blog, newsletter/RSS, each social platform. Status per item: `live` (entered + reachable), `found` (discovered on site, not entered — and reachable), `broken` (entered or linked but unreachable), `missing` (expected for industry, absent). Score = live+found / expected (from `industries.json`, default set if unknown industry), shown 0–100.
+- **Touchpoints:** checklist of website, blog, newsletter/RSS, each social platform. Status per item: `live` (entered + reachable), `found` (discovered on site, not entered — and reachable), `broken` (entered or linked but unreachable), `missing` (expected for industry, absent). Score = (live + found) / expected (from `industries.json`, default set if unknown industry), shown 0–100.
 - **Positioning — rules mode:** value proposition = best of H1 / title / meta description; top 10 phrases via TF-IDF over site text vs. a generic background corpus; matched archetype tags from keyword lists (price-led, premium, enterprise/B2B, consumer, sustainability, innovation, community).
 - **Positioning — AI mode:** enabled when `ANTHROPIC_API_KEY` secret exists. Model `claude-haiku-4-5-20251001` for cost. One call with collected data (truncated to budget) → JSON validated against schema: `statement, audience, differentiators[], tone, siteSocialConsistency, newsSentiment`. Invalid/failed → rules mode, with reason recorded.
 - **Competitors:** candidates scored by co-occurrence frequency with the brand × industry keyword overlap; own brand and generic words excluded; top 5. AI mode re-ranks and adds `reason` and `website` per competitor. Rules mode `website` is a best guess from result links, may be empty.
@@ -124,7 +130,7 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 
 ```json
 {
-  "v": 1, "id": "2026-10-06T10-12-00Z-acme", "type": "main|competitor",
+  "v": 1, "id": "<reportId>", "type": "main|competitor",
   "parentId": null, "createdAt": "...", "status": "ok|failed", "error": null,
   "mode": "ai|rules", "modeReason": "...",
   "input": { "name", "website", "industry", "socials": { "instagram": "...", ... } },
@@ -136,29 +142,28 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 }
 ```
 
-`reports/index.enc` decrypts to `[{ id, name, type, parentId, createdAt, status }]`.
-
 ## 8. Workflow (`analyze.yml`)
 
-- Trigger: `workflow_dispatch` with inputs `payload` (ciphertext) and `requestId`.
+- Trigger: `workflow_dispatch` with inputs `reportId` (validated `^[A-Za-z0-9_-]{22}$`) and `payload` (ciphertext).
 - `concurrency: brand-dna-commit` (queued, not cancelled).
-- Steps: checkout → setup Node 24 → `npm ci` → `node collector/run.mjs` → commit `reports/` with pull-rebase-retry (3 attempts).
-- `if: failure()` step writes an encrypted `{status:"failed", error}` report for `requestId` so the UI stops waiting.
 - `permissions: contents: write`.
-- Pages deploy from `main` branch root (classic Pages) serves the app only. Reports are read by the browser through the GitHub contents API (`GET /repos/{owner}/{repo}/contents/reports/...`, `Accept: application/vnd.github.raw`) with the PAT — avoids Pages' ~10 min CDN cache and rebuild delay.
+- Steps: checkout → setup Node 24 → `npm ci` → `node collector/run.mjs` → commit `reports/<reportId>.enc` with message `report: <reportId>`, pull-rebase-retry (3 attempts).
+- Run step writes decrypted `reportKey` to a temp file (never to logs, `::add-mask::` applied). `if: failure()` step uses it, if present, to write an encrypted `{status:"failed", error}` report so the UI stops waiting. If payload decryption itself fails, nothing is written (UI times out with Actions link).
+- Pages deploys from `main` root (classic Pages) and serves the app.
+- **Fetching reports:** with a PAT → GitHub contents API (`Accept: application/vnd.github.raw`), fresh, used for polling. Without a PAT (opened via shared link) → Pages URL `reports/<id>.enc`, falling back to `raw.githubusercontent.com`. Report files are immutable, so cache delay only matters for the first ~minutes after creation.
 
 ## 9. UI
 
-**Visual design:** light mode only. Font **Roboto** (Google Fonts, weights 400/500/700; fallback `system-ui, sans-serif`). Primary color **#97C4FF** used for buttons, accents, chart fills, active states, score ring. Because #97C4FF is light, text placed on it is dark (`#0B1F3A`); links and text accents use a darker derived shade (`#2F6FD0`) for contrast ≥ 4.5:1. Neutral off-white background, white cards, subtle borders. Responsive down to ~400 px.
+**Visual design:** light mode only. White background (`#FFFFFF`) for page and cards; cards separated by light gray borders (`#E6E9EF`) and subtle shadow. Font **Roboto** (Google Fonts, 400/500/700; fallback `system-ui, sans-serif`). Body text near-black (`#1A1D23`), secondary text gray (`#5B6270`). **Accent `#97C4FF`**: primary buttons, active tab/toggle, chart fills, score ring, focus outlines, highlight chips. Text on the accent is dark (`#0B1F3A`). Links and small accent text use a darker derived shade (`#2F6FD0`) for contrast ≥ 4.5:1. Responsive down to ~400 px.
 
 **Routes (hash-based):**
-1. `#/login` — username + password. Error: "Invalid credentials".
-2. `#/` dashboard — past reports (brand, date, type, status), running jobs with spinner, "New analysis" button, Logout.
-3. `#/new` — name\*, website\*, industry\* (select + free text), social URLs (Instagram, LinkedIn, X, Facebook, TikTok, YouTube, other). Client-side URL validation. Submit → dispatch → "Running… ~2 min" card; polls index every 15 s, timeout 10 min, then shows link to Actions runs.
-4. `#/report/<id>` — header (brand, site, date, mode badge, download buttons); Positioning card; Touchpoints card (score ring + checklist); Mentions card (7/30/60 toggle, big number, per-source counts, sparkline, headlines); Competitors card (5 rows + Compare); Data sources footer (status + limits).
-5. `#/compare/<a>/<b>` — two columns, aligned rows: positioning, touchpoint score, mentions per window, top phrases; differences highlighted. Download buttons.
+1. `#/` dashboard — "My reports" from local library (brand, date, type, status, Copy link, Remove-from-list), running jobs with spinner, "New analysis" button, Export / Import library. If no PAT: banner "Add a GitHub token in Settings to run analyses."
+2. `#/settings` — GitHub PAT field, "Test token" (calls API, checks repo access), Clear. Explanation of what the token is used for and that it stays on this device.
+3. `#/new` — name\*, website\*, industry\* (select + free text), social URLs (Instagram, LinkedIn, X, Facebook, TikTok, YouTube, other). Client-side URL validation. Submit → encrypt → dispatch → add to library as `running` → "Running… ~2 min" card; polls every 15 s, timeout 10 min, then link to Actions runs.
+4. `#/report/<id>?k=<key>` — header (brand, site, date, mode badge, Copy private link, download buttons); Positioning card; Touchpoints card (score ring + checklist); Mentions card (7/30/60 toggle, big number, per-source counts, sparkline, headlines); Competitors card (5 rows + Compare); Data sources footer (status + limits). Missing/wrong key → "This report can't be opened — the link is incomplete or invalid."
+5. `#/compare/<a>?k=<ka>&b=<b>&kb=<kb>` — two columns, aligned rows: positioning, touchpoint score, mentions per window, top phrases; differences highlighted. Copy link, download buttons.
 
-**Compare flow:** Compare on competitor → if a competitor report for that name + parent exists, open it; else dispatch run with `{name, website, industry: parent's}` and `type: competitor`, show running state, then open compare.
+**Compare flow:** Compare on a competitor → if library has a competitor report with that name and `parentId`, open compare; else (PAT required) dispatch run `{name, website, industry: parent's, type: competitor, parentId}`, show running state, then open compare.
 
 **Downloads:**
 - PDF: print stylesheet (hide nav/buttons, cards avoid page breaks) + `window.print()`.
@@ -172,30 +177,36 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 |---|---|
 | Collector fails/timeout/blocked | `ok:false` + reason; report still built; footer lists it |
 | AI missing/fails/invalid JSON | rules mode, `modeReason` set |
-| Workflow crashes | failure step writes encrypted failed report; UI shows error + Actions link |
-| PAT rejected (401/403) | "GitHub token rejected — re-run setup" |
-| Wrong `BRAND_PASSPHRASE` secret | decrypt fails → clear Actions log error, no report; UI times out with Actions link |
+| Workflow crashes after decrypt | failure step writes encrypted failed report; UI shows error + Actions link |
+| Payload decrypt fails (wrong key setup) | clear Actions log error, nothing written; UI times out with Actions link |
+| No PAT | New analysis / Compare disabled with pointer to Settings |
+| PAT rejected (401/403/404) | "GitHub token rejected — check Settings" |
+| Report link missing/invalid key | friendly "can't be opened" message; no crash |
+| Report not found (yet) | if in library as running → keep polling; else "Report not found" |
 | Invalid inputs | validated in browser and in workflow; http(s) only; private IPs refused |
 | Concurrent runs | concurrency group + pull-rebase-retry |
+| localStorage cleared | library empty; reports recoverable only via saved links or exported library file (stated in UI next to Export) |
 
 ## 11. Testing
 
 `node --test`, TDD.
-- crypto: browser-format ↔ Node round-trip, wrong password rejects, tampered ciphertext rejects.
+- crypto: hybrid encrypt in "browser" path → decrypt in Node path; report encrypt/decrypt round-trip; wrong key rejects; tampered ciphertext rejects.
+- library: add/remove/dedupe, export/import merge, link parsing.
 - each collector: against saved HTML/RSS/JSON fixtures; no network in tests (`safeFetch` injectable).
 - analyzer: dedupe, window bucketing, cap flag, touchpoint statuses/score, competitor ranking, AI response validation + fallback (mocked client).
-- frontend pure modules: formatters, CSV export, view-model builders.
+- frontend pure modules: formatters, CSV export, view-model builders, route parsing.
 - safeFetch: rejects private IPs and non-http schemes.
 - Manual e2e: `node collector/run.mjs --dry --name ... --website ...` prints plaintext report locally.
 
 ## 12. Setup (README)
 
-1. Fork/create repo (public), enable Pages from `main` / root.
-2. Create fine-grained PAT: this repo only, Actions read & write, Contents read.
-3. `node scripts/setup.mjs` → prompts username, password, PAT → writes `token.enc`; prints value for `BRAND_PASSPHRASE`.
-4. Add secrets `BRAND_PASSPHRASE` and optional `ANTHROPIC_API_KEY`.
-5. Commit `token.enc`, push. Open the Pages URL.
+1. Create repo (public), enable Pages from `main` / root.
+2. `node scripts/setup.mjs` → writes `keys/workflow-public.jwk`, prints private JWK.
+3. Add secrets `WORKFLOW_PRIVATE_KEY` (printed JWK) and optional `ANTHROPIC_API_KEY`.
+4. Commit `keys/workflow-public.jwk`, push.
+5. Create fine-grained PAT: this repo only, Actions read & write, Contents read.
+6. Open the Pages URL → Settings → paste PAT → Test token.
 
 ## 13. Out of scope (v1)
 
-Scheduled monitoring, multiple user accounts, follower counts for blocked platforms, sentiment in rules mode, historical trend across reports, paid data APIs.
+Login / user accounts, scheduled monitoring, follower counts for blocked platforms, sentiment in rules mode, historical trend across reports, deleting reports from git history, paid data APIs.
