@@ -27,7 +27,7 @@ Lost the private key? Run `node scripts/setup.mjs --force`, update the secret an
 - **Copy private link** to share a report. Anyone with the link can read it; nobody without it can.
 - **Compare** next to a competitor runs a full analysis of that competitor and opens a side-by-side view.
 - **Downloads:** PDF (print dialog → *Save as PDF*), JSON (full report) and CSV (mentions). Downloaded files are not encrypted.
-- **My reports** lives in this browser only. Use *Export list* for a backup; *Import list* on another device.
+- **My reports** lives in this browser only. Use *Export list* for a backup; *Import list* on another device. Downloaded files are not encrypted: the export contains the private links to every report in it, so store it like a password.
 
 ## What's collected
 

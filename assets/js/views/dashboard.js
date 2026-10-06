@@ -59,10 +59,13 @@ export function render(root, _route, ctx, signal) {
     const file = fileInput.files[0];
     if (!file) return;
     try {
-      const n = ctx.library.importJson(await file.text());
+      const text = await file.text();
+      if (signal?.aborted) return;
+      const n = ctx.library.importJson(text);
       importStatus.replaceChildren(notice(`Imported ${n} report${n === 1 ? '' : 's'}.`));
       if (n) setTimeout(() => { if (!signal.aborted) ctx.rerender(); }, 800);
     } catch (e) {
+      if (signal?.aborted) return;
       importStatus.replaceChildren(errorBox(e.message));
     }
   });
@@ -72,7 +75,7 @@ export function render(root, _route, ctx, signal) {
       entries.length
         ? h('ul', { class: 'list' }, entries.map((e) => entryRow(e, ctx, e.parentId ? names.get(e.parentId) : null)))
         : h('p', { class: 'muted', text: 'No reports yet. Start a new analysis or open a private link someone shared with you.' }),
-      stale ? errorBox('Some analyses did not finish within 10 minutes.', { actionsUrl: ctx.actionsUrl }) : null),
+      stale ? errorBox('Some analyses did not finish within 15 minutes.', { actionsUrl: ctx.actionsUrl }) : null),
     card({ title: 'Back up your list' },
       h('p', { class: 'muted', text: 'This list lives only in this browser. Reports can be opened only with their private links, so export the list to keep a backup — if browser data is cleared, the links are gone.' }),
       h('div', { class: 'row-actions' },
@@ -80,6 +83,8 @@ export function render(root, _route, ctx, signal) {
         button('Import list', { onClick: () => fileInput.click() }),
         fileInput),
       importStatus),
+    card({ title: 'Export' },
+      h('p', { class: 'muted small', text: 'Downloaded files are not encrypted. This file contains the private links to every report in it — store it like a password.' })),
   );
   watchRunning(ctx, signal);
 }
