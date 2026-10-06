@@ -65,8 +65,8 @@ User-entered `name` / `industry` always win over detected values.
 
 ### 2.3 `POST /api/share`
 
-- Body: `{ id, ciphertext }`; `id` must match `REPORT_ID_RE`; ciphertext ≤ 2 MB and must parse as the v1 encrypted-report envelope.
-- Writes `shares/<id>.enc` to Vercel Blob (`access: "public"`, `addRandomSuffix: false`, `allowOverwrite: false`). Returns `{ url }`. Same id twice → `409`, and the client reuses its existing link.
+- Body: `{ id, ciphertext }`; `id` is a fresh random share id (not the report id, so re-sharing after an import never collides) and must match `REPORT_ID_RE`; ciphertext ≤ 2 MB and must parse as the v1 encrypted-report envelope.
+- Writes `shares/<id>.enc` to Vercel Blob (`access: "public"`, `addRandomSuffix: false`, `allowOverwrite: false`). Returns `{ ok: true }`; `GET /api/share?id=` serves the ciphertext same-origin. Same id twice → `409`. The client stores the link and reuses it.
 - The blob store only ever holds ciphertext; the key exists only in the share link's `#` fragment, which browsers never send to servers.
 - Revoking a link is out of scope (see §8).
 
