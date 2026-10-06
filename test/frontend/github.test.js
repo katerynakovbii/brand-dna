@@ -55,6 +55,15 @@ test('testToken explains failures', async () => {
   assert.deepEqual(await bad.testToken(), { ok: false, message: 'GitHub token rejected — check Settings.' });
 });
 
+test('testToken flags a token that can read but not run the workflow', async () => {
+  const { calls, fetchImpl } = recorder((url, init) => new Response('', { status: init?.method === 'PUT' ? 403 : 200 }));
+  const readOnly = createGithub({ owner: 'o', repo: 'r', token: 't', fetchImpl });
+  const result = await readOnly.testToken();
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Actions: Read and write/);
+  assert.ok(calls.some((c) => c.url.endsWith('/actions/workflows/analyze.yml/enable') && c.init.method === 'PUT'));
+});
+
 test('fetchPublicReport tries Pages then raw.githubusercontent', async () => {
   const aid = 'a'.repeat(22);
   const { calls, fetchImpl } = recorder((url) => (url.startsWith('https://raw.') ? new Response('cipher') : new Response('', { status: 404 })));

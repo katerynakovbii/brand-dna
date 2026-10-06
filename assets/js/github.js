@@ -56,6 +56,10 @@ export function createGithub({ owner, repo, token, fetchImpl = (...a) => globalT
         if (!repoRes.ok) return { ok: false, message: `Repository ${owner}/${repo} not found for this token.` };
         const wf = await call('/actions/workflows/analyze.yml', { headers: json });
         if (!wf.ok) return { ok: false, message: 'Token can read the repository but not its Actions workflow. Give it Actions: read & write.' };
+        // Enabling an already active workflow changes nothing but needs the same write access as starting a run.
+        const canRun = await call('/actions/workflows/analyze.yml/enable', { method: 'PUT', headers: json })
+          .then((res) => res.ok, (e) => (e instanceof TokenRejectedError ? false : Promise.reject(e)));
+        if (!canRun) return { ok: false, message: 'Token can read the workflow but not start it. Set Actions: Read and write on the token.' };
         return { ok: true, message: `Token works for ${owner}/${repo}.` };
       } catch (e) {
         return { ok: false, message: e.message };
