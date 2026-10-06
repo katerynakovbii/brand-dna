@@ -16,7 +16,7 @@ export function mentionsCsv(report) {
 }
 
 export function compareCsv(a, b) {
-  const rows = [a, b].flatMap((r) => items(r).map((m) => line([String(r?.input?.name ?? 'brand'), String(m.date ?? ''), String(m.source ?? ''), String(m.title ?? ''), safeHref(m.url) ?? ''])));
+  const rows = [a, b].flatMap((r) => items(r).map((m) => line([typeof r?.input?.name === 'string' ? r.input.name : 'brand', String(m.date ?? ''), String(m.source ?? ''), String(m.title ?? ''), safeHref(m.url) ?? ''])));
   return [line(['brand', 'date', 'source', 'title', 'url']), ...rows].join('\r\n') + '\r\n';
 }
 

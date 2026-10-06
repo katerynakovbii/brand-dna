@@ -31,6 +31,13 @@ test('compareCsv prefixes brand column', () => {
   assert.match(compareCsv(report, b), /^brand.*\r\nBen & Jerry's,2026-10-05/);
 });
 
+test('compareCsv uses "brand" fallback for non-string names', () => {
+  const nonStringName = { input: { name: { x: 1 } }, mentions: { items: [{ date: '2026-10-05', source: 's', title: 't', url: 'https://x.test' }] } };
+  const b = { input: { name: 'Other' }, mentions: { items: [] } };
+  const csv = compareCsv(nonStringName, b);
+  assert.match(csv, /^brand.*\r\nbrand,2026-10-05/);
+});
+
 test('file names', () => {
   assert.equal(slug("Ben & Jerry's"), 'ben-jerry-s');
   assert.equal(slug(''), 'report');
