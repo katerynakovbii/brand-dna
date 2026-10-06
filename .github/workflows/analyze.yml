@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate report id
+        id: validate
         run: |
           if ! [[ "$REPORT_ID" =~ ^[A-Za-z0-9_-]{22}$ ]]; then
             echo "Invalid reportId"
@@ -56,5 +57,5 @@ jobs:
         run: node collector/fail.mjs
 
       - name: Commit report
-        if: always()
+        if: always() && steps.validate.outcome == 'success'
         run: bash scripts/commit-report.sh "reports/$REPORT_ID.enc" "report: $REPORT_ID"

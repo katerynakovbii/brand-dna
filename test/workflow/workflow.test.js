@@ -47,28 +47,58 @@ function addReport(repo, id) {
   writeFileSync(join(repo, 'reports', `${id}.enc`), '{}');
 }
 
+const ID1 = 'A'.repeat(22);
+const ID2 = 'b-_'.padEnd(22, 'c');
+const ID3 = 'd'.repeat(22);
+
 test('commit script pushes the report', () => {
   const { a, origin } = repos();
-  addReport(a, 'one');
-  execFileSync('bash', [script, 'reports/one.enc', 'report: one'], { cwd: a, env });
-  assert.match(execFileSync('git', ['--git-dir', origin, 'log', '--oneline', 'main'], { encoding: 'utf8' }), /report: one/);
+  addReport(a, ID1);
+  execFileSync('bash', [script, `reports/${ID1}.enc`, `report: ${ID1}`], { cwd: a, env });
+  assert.ok(execFileSync('git', ['--git-dir', origin, 'log', '--oneline', 'main'], { encoding: 'utf8' }).includes(`report: ${ID1}`));
 });
 
 test('commit script rebases and retries when another run pushed first', () => {
   const { a, b, origin } = repos();
-  addReport(a, 'first');
-  execFileSync('bash', [script, 'reports/first.enc', 'report: first'], { cwd: a, env });
-  addReport(b, 'second');
-  const out = execFileSync('bash', [script, 'reports/second.enc', 'report: second'], { cwd: b, env, encoding: 'utf8' });
+  addReport(a, ID2);
+  execFileSync('bash', [script, `reports/${ID2}.enc`, `report: ${ID2}`], { cwd: a, env });
+  addReport(b, ID3);
+  const out = execFileSync('bash', [script, `reports/${ID3}.enc`, `report: ${ID3}`], { cwd: b, env, encoding: 'utf8' });
   assert.match(out, /attempt 2/);
   const log = execFileSync('git', ['--git-dir', origin, 'log', '--oneline', 'main'], { encoding: 'utf8' });
-  assert.match(log, /report: first/);
-  assert.match(log, /report: second/);
+  assert.ok(log.includes(`report: ${ID2}`));
+  assert.ok(log.includes(`report: ${ID3}`));
 });
 
 test('commit script is a no-op when the report file is missing', () => {
   const { a } = repos();
-  const r = spawnSync('bash', [script, 'reports/none.enc', 'report: none'], { cwd: a, env, encoding: 'utf8' });
+  const r = spawnSync('bash', [script, `reports/${ID1}.enc`, 'report: none'], { cwd: a, env, encoding: 'utf8' });
   assert.equal(r.status, 0);
   assert.match(r.stdout, /No report file/);
+});
+
+test('commit script rejects an invalid report id without echoing it', () => {
+  const { a, origin } = repos();
+  const bad = 'x y; rm -rf';
+  mkdirSync(join(a, 'reports'), { recursive: true });
+  writeFileSync(join(a, 'reports', `${bad}.enc`), '{}');
+  for (const f of [`reports/${bad}.enc`, 'reports/short.enc', `reports/${'a'.repeat(23)}.enc`, 'reports/../x.enc']) {
+    const r = spawnSync('bash', [script, f, 'report: bad'], { cwd: a, env, encoding: 'utf8' });
+    assert.notEqual(r.status, 0, f);
+    assert.ok(!(r.stdout + r.stderr).includes('rm -rf'));
+  }
+  assert.ok(!execFileSync('git', ['--git-dir', origin, 'log', '--oneline', 'main'], { encoding: 'utf8' }).includes('report: bad'));
+});
+
+test('commit step runs after failures but only when id validation succeeded', () => {
+  assert.match(yml, /name: Validate report id\n\s+id: validate/);
+  assert.match(yml, /name: Commit report\n\s+if: always\(\) && steps\.validate\.outcome == 'success'/);
+});
+
+test('analyze step timeout stays below the browser poll timeout', () => {
+  assert.match(yml, /name: Analyze\n\s+timeout-minutes: 10\n/);
+});
+
+test('checkout keeps persisted credentials because the commit step pushes with them', () => {
+  assert.doesNotMatch(yml, /persist-credentials/);
 });

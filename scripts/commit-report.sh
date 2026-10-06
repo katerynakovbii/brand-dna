@@ -6,6 +6,12 @@ set -euo pipefail
 file="$1"
 msg="$2"
 
+id="$(basename -- "$file" .enc)"
+if ! [[ "$id" =~ ^[A-Za-z0-9_-]{22}$ ]]; then
+  echo "Invalid report file name." >&2
+  exit 2
+fi
+
 if [[ ! -f "$file" ]]; then
   echo "No report file to commit."
   exit 0
