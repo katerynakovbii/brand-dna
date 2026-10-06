@@ -26,6 +26,21 @@ test('isPrivateIp classifies addresses', () => {
   }
 });
 
+test('isPrivateIp blocks IPv6 and reserved ranges', () => {
+  // IPv6 link-local, site-local, NAT64, 6to4, IPv4-compatible, IPv4-mapped
+  for (const ip of ['fe90::1', 'febf::1', 'fec0::1', '64:ff9b::7f00:1', '2002:7f00:1::', '::127.0.0.1', '0:0:0:0:0:ffff:7f00:1']) {
+    assert.equal(isPrivateIp(ip), true, ip);
+  }
+  // Reserved IPv4 ranges
+  for (const ip of ['192.0.0.0', '192.0.0.255', '192.0.2.0', '192.0.2.255', '198.18.0.0', '198.19.255.255', '198.51.100.0', '198.51.100.255']) {
+    assert.equal(isPrivateIp(ip), true, ip);
+  }
+  // Public addresses stay false
+  for (const ip of ['2606:4700::1111', '8.8.8.8']) {
+    assert.equal(isPrivateIp(ip), false, ip);
+  }
+});
+
 test('blocks non-http schemes', async () => {
   const f = createSafeFetch({ fetchImpl: stubFetch({}), lookup: publicLookup });
   await assert.rejects(f('file:///etc/passwd'), /blocked scheme/);
@@ -71,4 +86,9 @@ test('getText and getJson wrap responses', async () => {
   const bad = await getJson(f, 'https://a.test/e');
   assert.equal(bad.ok, false);
   assert.equal(bad.json, null);
+});
+
+test('blocks IPv6 localhost literal', async () => {
+  const f = createSafeFetch({ fetchImpl: stubFetch({}), lookup: publicLookup });
+  await assert.rejects(f('http://[::1]/'), /blocked private address/);
 });
