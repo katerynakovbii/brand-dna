@@ -52,7 +52,14 @@ test('testToken explains failures', async () => {
   const noActions = createGithub({ owner: 'o', repo: 'r', token: 't', fetchImpl: async (url) => new Response('{}', { status: url.endsWith('/r') ? 200 : 404 }) });
   assert.match((await noActions.testToken()).message, /Actions/);
   const bad = createGithub({ owner: 'o', repo: 'r', token: 't', fetchImpl: async () => new Response('', { status: 401 }) });
-  assert.deepEqual(await bad.testToken(), { ok: false, message: 'GitHub token rejected — check Settings.' });
+  assert.deepEqual(await bad.testToken(), { ok: false, message: 'GitHub token rejected (HTTP 401) — check Settings.' });
+});
+
+test('a rejected dispatch names the HTTP status', async () => {
+  for (const status of [401, 403, 404]) {
+    const gh = createGithub({ owner: 'o', repo: 'r', token: 't', fetchImpl: async () => new Response('', { status }) });
+    await assert.rejects(gh.dispatch({ reportId: 'a'.repeat(22), payload: 'p' }), { name: 'TokenRejectedError', message: `GitHub token rejected (HTTP ${status}) — check Settings.` });
+  }
 });
 
 test('testToken flags a token that can read but not run the workflow', async () => {

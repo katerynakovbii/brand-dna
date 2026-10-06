@@ -3,8 +3,8 @@ import { REPORT_ID_RE } from '../../shared/schema.js';
 const API = 'https://api.github.com';
 
 export class TokenRejectedError extends Error {
-  constructor() {
-    super('GitHub token rejected — check Settings.');
+  constructor(status) {
+    super(`GitHub token rejected${status ? ` (HTTP ${status})` : ''} — check Settings.`);
     this.name = 'TokenRejectedError';
   }
 }
@@ -27,7 +27,7 @@ export function createGithub({ owner, repo, token, fetchImpl = (...a) => globalT
       ...init,
       headers: { authorization: `Bearer ${token}`, 'x-github-api-version': '2022-11-28', ...(init.headers || {}) },
     });
-    if (res.status === 401 || res.status === 403) throw new TokenRejectedError();
+    if (res.status === 401 || res.status === 403) throw new TokenRejectedError(res.status);
     return res;
   }
   const json = { accept: 'application/vnd.github+json' };
@@ -40,7 +40,7 @@ export function createGithub({ owner, repo, token, fetchImpl = (...a) => globalT
         headers: { ...json, 'content-type': 'application/json' },
         body: JSON.stringify({ ref: 'main', inputs: { reportId, payload } }),
       });
-      if (res.status === 404) throw new TokenRejectedError();
+      if (res.status === 404) throw new TokenRejectedError(404);
       if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
     },
     async fetchReport(id) {
