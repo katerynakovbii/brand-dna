@@ -28,7 +28,7 @@ function field(name, label, input, hint = null) {
     h('span', { class: 'error', id: `e-${name}`, 'aria-live': 'polite' }));
 }
 
-export async function render(root, _route, ctx) {
+export async function render(root, _route, ctx, signal) {
   if (!ctx.hasToken || !ctx.github) {
     root.append(card({ title: 'New analysis' },
       notice(ctx.repo ? 'Add a GitHub token in Settings to run analyses.' : "Couldn't detect the GitHub repository from this address. Set REPO_OVERRIDE in assets/js/config.js."),
@@ -40,6 +40,7 @@ export async function render(root, _route, ctx) {
   try {
     table = await ctx.industries();
   } catch {}
+  if (signal?.aborted) return;
   const custom = h('input', { type: 'text', placeholder: 'Type your industry', maxlength: 60, hidden: true });
   const select = h('select', { required: true },
     h('option', { value: '', text: 'Choose an industry' }),

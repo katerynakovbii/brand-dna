@@ -32,12 +32,14 @@ function entryRow(entry, ctx, parentName) {
       })));
 }
 
+export const shouldRerender = (state) => state === 'ready' || state === 'timeout';
+
 function watchRunning(ctx, signal) {
   for (const e of ctx.library.list().filter((x) => x.status === 'running' && !isStale(x))) {
     pollReport({ id: e.reportId, key: e.reportKey, fetchText: ctx.fetchText, signal, startedAt: Date.parse(e.createdAt) })
       .then((r) => {
         if (r.state === 'ready') recordResult(ctx.library, r.report, e.reportKey);
-        if (!signal.aborted && r.state !== 'aborted') ctx.rerender();
+        if (!signal.aborted && shouldRerender(r.state)) ctx.rerender();
       })
       .catch(() => {});
   }
@@ -59,7 +61,7 @@ export function render(root, _route, ctx, signal) {
     try {
       const n = ctx.library.importJson(await file.text());
       importStatus.replaceChildren(notice(`Imported ${n} report${n === 1 ? '' : 's'}.`));
-      if (n) setTimeout(() => ctx.rerender(), 800);
+      if (n) setTimeout(() => { if (!signal.aborted) ctx.rerender(); }, 800);
     } catch (e) {
       importStatus.replaceChildren(errorBox(e.message));
     }
