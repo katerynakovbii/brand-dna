@@ -121,8 +121,8 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 
 - **Dedupe:** by normalized URL, then by title similarity (token Jaccard ≥ 0.8).
 - **Windows:** mentions bucketed into 7 / 30 / 60 days relative to run time. Per window: total, per-source counts, top 10 headlines (newest first), weekly counts for sparkline. If any source hit its cap, total is marked `capped: true` → "100+".
-- **Touchpoints:** checklist of website, blog, newsletter/RSS, each social platform. Status per item: `live` (entered + reachable), `found` (discovered on site, not entered — and reachable), `broken` (entered or linked but unreachable), `missing` (expected for industry, absent). Score = (live + found) / expected (from `industries.json`, default set if unknown industry), shown 0–100.
-- **Positioning — rules mode:** value proposition = best of H1 / title / meta description; top 10 phrases via TF-IDF over site text vs. a generic background corpus; matched archetype tags from keyword lists (price-led, premium, enterprise/B2B, consumer, sustainability, innovation, community).
+- **Touchpoints:** checklist of website, blog, newsletter/RSS, each social platform. Status per item: `live` (entered + reachable), `found` (discovered on site, not entered — and reachable), `unverified` (entered or discovered on a platform that blocks automated checks, e.g. LinkedIn 999 / Instagram login wall / 403 / 429 — presence assumed, not confirmed), `broken` (entered or linked but unreachable), `missing` (expected for industry, absent). Score = (live + found + unverified) / expected (from `industries.json`, default set if unknown industry), shown 0–100.
+- **Positioning — rules mode:** value proposition = best of H1 / title / meta description; top 10 phrases (unigrams + bigrams, stopwords and generic web words removed, frequency-scored with ×3 boost for title/H1/H2/meta occurrences); matched archetype tags from keyword lists (price-led, premium, enterprise/B2B, consumer, sustainability, innovation, community).
 - **Positioning — AI mode:** enabled when `ANTHROPIC_API_KEY` secret exists. Model `claude-haiku-4-5-20251001` for cost. One call with collected data (truncated to budget) → JSON validated against schema: `statement, audience, differentiators[], tone, siteSocialConsistency, newsSentiment`. Invalid/failed → rules mode, with reason recorded.
 - **Competitors:** candidates scored by co-occurrence frequency with the brand × industry keyword overlap; own brand and generic words excluded; top 5. AI mode re-ranks and adds `reason` and `website` per competitor. Rules mode `website` is a best guess from result links, may be empty.
 
@@ -145,9 +145,9 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 ## 8. Workflow (`analyze.yml`)
 
 - Trigger: `workflow_dispatch` with inputs `reportId` (validated `^[A-Za-z0-9_-]{22}$`) and `payload` (ciphertext).
-- `concurrency: brand-dna-commit` (queued, not cancelled).
+- No concurrency group (GitHub cancels pending runs beyond one per group). Runs execute in parallel; each writes a distinct file, so commits never conflict — push uses pull-rebase-retry (5 attempts, random 2–12 s backoff).
 - `permissions: contents: write`.
-- Steps: checkout → setup Node 24 → `npm ci` → `node collector/run.mjs` → commit `reports/<reportId>.enc` with message `report: <reportId>`, pull-rebase-retry (3 attempts).
+- Steps: checkout → setup Node 24 → `npm ci` → `node collector/run.mjs` → commit `reports/<reportId>.enc` with message `report: <reportId>`, pull-rebase-retry.
 - Run step writes decrypted `reportKey` to a temp file (never to logs, `::add-mask::` applied). `if: failure()` step uses it, if present, to write an encrypted `{status:"failed", error}` report so the UI stops waiting. If payload decryption itself fails, nothing is written (UI times out with Actions link).
 - Pages deploys from `main` root (classic Pages) and serves the app.
 - **Fetching reports:** with a PAT → GitHub contents API (`Accept: application/vnd.github.raw`), fresh, used for polling. Without a PAT (opened via shared link) → Pages URL `reports/<id>.enc`, falling back to `raw.githubusercontent.com`. Report files are immutable, so cache delay only matters for the first ~minutes after creation.
@@ -184,7 +184,7 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 | Report link missing/invalid key | friendly "can't be opened" message; no crash |
 | Report not found (yet) | if in library as running → keep polling; else "Report not found" |
 | Invalid inputs | validated in browser and in workflow; http(s) only; private IPs refused |
-| Concurrent runs | concurrency group + pull-rebase-retry |
+| Concurrent runs | parallel runs, distinct files, pull-rebase-retry on push |
 | localStorage cleared | library empty; reports recoverable only via saved links or exported library file (stated in UI next to Export) |
 
 ## 11. Testing
