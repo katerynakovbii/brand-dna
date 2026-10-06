@@ -22,3 +22,12 @@ test('builds hashes that round-trip', () => {
     { name: 'compare', a: id, ka: key, b: 'B'.repeat(22), kb: 'z'.repeat(43) });
   assert.equal(absoluteLink('#/x', { origin: 'https://me.github.io', pathname: '/brand-dna/' }), 'https://me.github.io/brand-dna/#/x');
 });
+
+test('parseRoute handles non-string inputs without throwing', () => {
+  assert.deepEqual(parseRoute(null), { name: 'notfound' });
+  assert.deepEqual(parseRoute(42), { name: 'notfound' });
+  assert.deepEqual(parseRoute(undefined), { name: 'dashboard' });
+  assert.doesNotThrow(() => parseRoute(null));
+  assert.doesNotThrow(() => parseRoute(42));
+  assert.doesNotThrow(() => parseRoute(undefined));
+});

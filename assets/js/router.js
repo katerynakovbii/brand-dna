@@ -1,4 +1,5 @@
 export function parseRoute(hash = '') {
+  if (typeof hash !== 'string') return { name: 'notfound' };
   const [path, query = ''] = hash.replace(/^#/, '').split('?');
   const parts = path.split('/').filter(Boolean);
   const q = new URLSearchParams(query);

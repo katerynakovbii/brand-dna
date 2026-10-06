@@ -5,14 +5,10 @@ const NOT_LIBRARY = 'Not a Brand DNA library file.';
 
 // localStorage can be missing or throw (private mode, blocked site data, quota). Never let that crash the app.
 export function safeStorage(getStorage = () => globalThis.localStorage) {
-  let cachedStorage = undefined;
   const store = () => {
-    if (cachedStorage !== undefined) return cachedStorage;
     try {
-      cachedStorage = getStorage() ?? null;
-      return cachedStorage;
+      return getStorage() ?? null;
     } catch {
-      cachedStorage = null;
       return null;
     }
   };
@@ -103,7 +99,7 @@ export function createLibrary(storage) {
         have.add(e.reportId);
         added++;
       }
-      write(arr);
+      if (!write(arr)) return 0;
       return added;
     },
     findCompetitor(parentId, name) {

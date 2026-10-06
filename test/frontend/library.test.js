@@ -42,10 +42,12 @@ test('corrupt storage reads as empty; junk entries dropped', () => {
 });
 
 test('export/import adds only missing valid entries', () => {
-  const a = createLibrary(safeStorage(() => memStorage()));
+  const storeA = memStorage();
+  const a = createLibrary(safeStorage(() => storeA));
   a.upsert(entry(1));
   a.upsert(entry(2));
-  const b = createLibrary(safeStorage(() => memStorage()));
+  const storeB = memStorage();
+  const b = createLibrary(safeStorage(() => storeB));
   b.upsert({ ...entry(1), name: 'Local name' });
   assert.equal(b.importJson(a.exportJson()), 1);
   assert.equal(b.get(entry(1).reportId).name, 'Local name', 'existing entries untouched');
@@ -56,7 +58,8 @@ test('export/import adds only missing valid entries', () => {
 });
 
 test('findCompetitor matches parent + case-insensitive name, skips failed', () => {
-  const l = createLibrary(safeStorage(() => memStorage()));
+  const store = memStorage();
+  const l = createLibrary(safeStorage(() => store));
   const parentId = entry(1).reportId;
   l.upsert(entry(2, { type: 'competitor', parentId, name: 'Trello', status: 'failed' }));
   assert.equal(l.findCompetitor(parentId, 'trello'), null);
@@ -65,7 +68,8 @@ test('findCompetitor matches parent + case-insensitive name, skips failed', () =
 });
 
 test('settings stores token trimmed and clears it', () => {
-  const s = createSettings(safeStorage(() => memStorage()));
+  const store = memStorage();
+  const s = createSettings(safeStorage(() => store));
   assert.equal(s.getToken(), '');
   s.setToken('  github_pat_x  ');
   assert.equal(s.getToken(), 'github_pat_x');
