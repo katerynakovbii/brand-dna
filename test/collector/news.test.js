@@ -45,3 +45,24 @@ test('google cap flagged at 100 items', async () => {
   const r = await collectNews({ name: 'Acme' }, { fetcher, now });
   assert.equal(r.data.capped['google-news'], true);
 });
+
+test('unwrapBing rejects javascript urls and falls back to original', () => {
+  assert.equal(unwrapBing('http://www.bing.com/news/apiclick.aspx?url=javascript%3Aalert(1)'), 'http://www.bing.com/news/apiclick.aspx?url=javascript%3Aalert(1)');
+});
+
+test('unwrapBing rejects relative urls and falls back to original', () => {
+  assert.equal(unwrapBing('http://www.bing.com/news/apiclick.aspx?url=%2Frelative'), 'http://www.bing.com/news/apiclick.aspx?url=%2Frelative');
+});
+
+test('collectNews excludes items with non-http(s) links', async () => {
+  const badGoogle = `<?xml version="1.0"?><rss version="2.0"><channel>
+    <item><title>Acme bad link</title><link>javascript:alert(1)</link><pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate></item>
+    <item><title>Acme good link</title><link>https://news.test/x</link><pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate></item>
+  </channel></rss>`;
+  const fetcher = fakeFetcher([[/news\.google\.com/, { body: badGoogle }], [/bing\.com/, { body: bing }]]);
+  const r = await collectNews({ name: 'Acme' }, { fetcher, now });
+  assert.equal(r.ok, true);
+  const goodLinks = r.data.items.filter((i) => i.source === 'google-news');
+  assert.equal(goodLinks.length, 1);
+  assert.equal(goodLinks[0].url, 'https://news.test/x');
+});

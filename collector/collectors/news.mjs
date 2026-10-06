@@ -1,5 +1,6 @@
 import { getText } from '../safeFetch.mjs';
 import { parseFeed } from '../rss.mjs';
+import { isHttpUrl } from '../../shared/platforms.js';
 
 export const GOOGLE_CAP = 100;
 const DAY = 86400000;
@@ -10,7 +11,8 @@ export const bingNewsUrl = (q) => `https://www.bing.com/news/search?q=${encodeUR
 
 export function unwrapBing(link) {
   try {
-    return new URL(link).searchParams.get('url') || link;
+    const unwrapped = new URL(link).searchParams.get('url') || link;
+    return isHttpUrl(unwrapped) ? unwrapped : link;
   } catch {
     return link;
   }
@@ -41,7 +43,7 @@ export async function collectNews({ name }, { fetcher, now = new Date() }) {
     .map((i) => ({ date: i.date, source: 'bing-news', title: i.title, url: unwrapBing(i.link), publisher: null }));
 
   const minTime = now.getTime() - 60 * DAY;
-  const items = [...googleItems, ...bingItems].filter((i) => i.date && i.url && Date.parse(i.date) >= minTime);
+  const items = [...googleItems, ...bingItems].filter((i) => i.date && isHttpUrl(i.url) && Date.parse(i.date) >= minTime);
   return {
     source: 'news',
     ok: true,
