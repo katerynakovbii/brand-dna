@@ -18,9 +18,14 @@ function isPrivateIpv4(ip) {
 }
 
 export function isPrivateIp(ip) {
-  if (net.isIPv4(ip)) {
+  // Fail closed: invalid input is treated as private
+  const ipType = net.isIP(ip);
+  if (ipType === 0) return true;  // Not a valid IPv4 or IPv6 address
+
+  if (ipType === 4) {
     return isPrivateIpv4(ip);
   }
+
   const v = ip.toLowerCase();
   if (v === '::1' || v === '::') return true;
 
@@ -48,21 +53,32 @@ export function isPrivateIp(ip) {
   try {
     hextets = parseIPv6(v);
   } catch {
-    return false;
+    return true;  // Fail closed on parse error
   }
 
-  if (!hextets) return false;
+  if (!hextets) return true;  // Fail closed if parsing returns null
 
   const first = hextets[0];
 
-  // ULA (fc00::/7, fd00::/8)
-  if ((first >= 0xfc00 && first <= 0xfdff) || (first >= 0xfd00 && first <= 0xfdff)) return true;
+  // ::/96 IPv4-compatible (all zeros in hextets 0-5, any values in 6-7)
+  if (hextets[0] === 0 && hextets[1] === 0 && hextets[2] === 0 && hextets[3] === 0 && hextets[4] === 0 && hextets[5] === 0) {
+    return true;
+  }
+
+  // ULA (fc00::/7)
+  if ((first >= 0xfc00 && first <= 0xfdff)) return true;
 
   // Link-local (fe80::/10)
   if ((first >= 0xfe80 && first <= 0xfebf)) return true;
 
   // Site-local (fec0::/10)
   if ((first >= 0xfec0 && first <= 0xfedf)) return true;
+
+  // Multicast (ff00::/8)
+  if ((first >= 0xff00 && first <= 0xffff)) return true;
+
+  // Documentation (2001:db8::/32)
+  if (first === 0x2001 && hextets[1] === 0xdb8) return true;
 
   // IPv4-mapped (0:0:0:0:0:ffff:xxxx:xxxx)
   if (hextets[5] === 0xffff && hextets[0] === 0 && hextets[1] === 0 && hextets[2] === 0 && hextets[3] === 0 && hextets[4] === 0) {

@@ -41,6 +41,25 @@ test('isPrivateIp blocks IPv6 and reserved ranges', () => {
   }
 });
 
+test('isPrivateIp handles ::/96 IPv4-compatible, multicast, documentation, and invalid input', () => {
+  // IPv4-compatible (::x.x.x.x hex forms and expanded forms)
+  for (const ip of ['::7f00:1', '::a00:1', '0:0:0:0:0:0:0:1']) {
+    assert.equal(isPrivateIp(ip), true, ip);
+  }
+  // Multicast (ff00::/8) and documentation (2001:db8::/32)
+  for (const ip of ['ff02::1', '2001:db8::1']) {
+    assert.equal(isPrivateIp(ip), true, ip);
+  }
+  // Invalid input (fail closed)
+  for (const ip of ['garbage', '', '1.2.3']) {
+    assert.equal(isPrivateIp(ip), true, ip);
+  }
+  // Public addresses stay false
+  for (const ip of ['2606:4700::1111', '8.8.8.8', '2001:4860:4860::8888']) {
+    assert.equal(isPrivateIp(ip), false, ip);
+  }
+});
+
 test('blocks non-http schemes', async () => {
   const f = createSafeFetch({ fetchImpl: stubFetch({}), lookup: publicLookup });
   await assert.rejects(f('file:///etc/passwd'), /blocked scheme/);
@@ -91,4 +110,9 @@ test('getText and getJson wrap responses', async () => {
 test('blocks IPv6 localhost literal', async () => {
   const f = createSafeFetch({ fetchImpl: stubFetch({}), lookup: publicLookup });
   await assert.rejects(f('http://[::1]/'), /blocked private address/);
+});
+
+test('blocks IPv4-compatible hex form rewritten by WHATWG parser', async () => {
+  const f = createSafeFetch({ fetchImpl: stubFetch({}), lookup: publicLookup });
+  await assert.rejects(f('http://[::127.0.0.1]/'), /blocked private address/);
 });
