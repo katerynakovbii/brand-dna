@@ -58,4 +58,5 @@ jobs:
 
       - name: Commit report
         if: always() && steps.validate.outcome == 'success'
-        run: bash scripts/commit-report.sh "reports/$REPORT_ID.enc" "report: $REPORT_ID"
+        run: |
+          bash scripts/commit-report.sh "reports/$REPORT_ID.enc" "report: $REPORT_ID"

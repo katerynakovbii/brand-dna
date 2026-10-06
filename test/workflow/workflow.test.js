@@ -4,9 +4,14 @@ import { readFileSync, mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseDocument } from 'yaml';
 
 const yml = readFileSync(new URL('../../.github/workflows/analyze.yml', import.meta.url), 'utf8');
 const script = new URL('../../scripts/commit-report.sh', import.meta.url).pathname;
+
+test('workflow file is valid YAML', () => {
+  assert.deepEqual(parseDocument(yml).errors.map((e) => e.message), []);
+});
 
 test('untrusted inputs and secrets only reach steps through env', () => {
   for (const line of yml.split('\n').filter((l) => /\$\{\{\s*(inputs|secrets)\./.test(l))) {
