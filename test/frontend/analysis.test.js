@@ -94,3 +94,11 @@ test('recordResult and isStale', () => {
   assert.equal(isStale({ status: 'running', createdAt: '2026-10-06T00:00:00Z' }, Date.parse('2026-10-06T00:05:00Z')), false);
   assert.equal(isStale({ status: 'ok', createdAt: '2020-01-01T00:00:00Z' }), false);
 });
+
+test('recordResult rejects malformed reports', () => {
+  const library = newLib();
+  const key = generateReportKey();
+  assert.equal(recordResult(library, null, key), null);
+  assert.equal(recordResult(library, 42, key), null);
+  assert.equal(recordResult(library, {}, key), null);
+});

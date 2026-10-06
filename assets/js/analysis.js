@@ -39,6 +39,7 @@ export async function loadReport({ id, key, fetchText }) {
 
 const defaultSleep = (ms, signal) =>
   new Promise((resolve) => {
+    if (signal?.aborted) { resolve(); return; }
     const t = setTimeout(resolve, ms);
     signal?.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
   });
@@ -64,8 +65,9 @@ export async function pollReport({
 }
 
 export function recordResult(library, report, key) {
-  const existing = library.get(report.id);
+  if (!report || typeof report !== 'object' || typeof report.id !== 'string') return null;
   try {
+    const existing = library.get(report.id);
     return library.upsert({
       reportId: report.id,
       reportKey: key,

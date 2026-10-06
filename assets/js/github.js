@@ -1,3 +1,5 @@
+import { REPORT_ID_RE } from '../../shared/schema.js';
+
 const API = 'https://api.github.com';
 
 export class TokenRejectedError extends Error {
@@ -42,6 +44,7 @@ export function createGithub({ owner, repo, token, fetchImpl = (...a) => globalT
       if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
     },
     async fetchReport(id) {
+      if (!REPORT_ID_RE.test(String(id))) return null;
       const res = await call(`/contents/reports/${id}.enc?ref=main`, { headers: { accept: 'application/vnd.github.raw' } });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
@@ -63,6 +66,7 @@ export function createGithub({ owner, repo, token, fetchImpl = (...a) => globalT
 
 // For people who open a shared link without a token. Report files are immutable, so caching is harmless.
 export async function fetchPublicReport({ id, owner, repo, pageBase, fetchImpl = (...a) => globalThis.fetch(...a) }) {
+  if (!REPORT_ID_RE.test(String(id))) return null;
   const urls = [new URL(`reports/${id}.enc`, pageBase).href];
   if (owner && repo) urls.push(`https://raw.githubusercontent.com/${owner}/${repo}/main/reports/${id}.enc`);
   for (const url of urls) {
