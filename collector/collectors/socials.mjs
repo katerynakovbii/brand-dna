@@ -53,7 +53,7 @@ async function youtubeFeed(channelId, fetcher) {
   try {
     const r = await getText(fetcher, `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`);
     if (!r.ok) return [];
-    return parseFeed(r.text).slice(0, 5).map((e) => ({ title: e.title, url: e.link, date: e.date }));
+    return parseFeed(r.text).filter((e) => isHttpUrl(e.link)).slice(0, 5).map((e) => ({ title: e.title, url: e.link, date: e.date }));
   } catch {
     return [];
   }

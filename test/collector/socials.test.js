@@ -42,3 +42,15 @@ test('no socials → empty lists', async () => {
   const r = await collectSocials({ socials: {} }, { fetcher: fakeFetcher([]) });
   assert.deepEqual(r.data, { profiles: [], youtubeVideos: [] });
 });
+
+test('filters out non-http(s) youtube video links', async () => {
+  const fetcher = fakeFetcher([
+    ['https://www.youtube.com/@acme', { body: `${og('Acme', 'Videos')}<script>"channelId":"UCabcdefghijklmnopqrstuv"</script>` }],
+    [/feeds\/videos\.xml\?channel_id=UCabcdefghijklmnopqrstuv/, { body: `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Bad</title><link rel="alternate" href="javascript:alert(1)"/><published>2026-10-01T10:00:00Z</published></entry><entry><title>Good</title><link rel="alternate" href="https://www.youtube.com/watch?v=2"/><published>2026-10-01T11:00:00Z</published></entry></feed>` }],
+  ]);
+  const r = await collectSocials(
+    { socials: { youtube: 'https://www.youtube.com/@acme' } },
+    { fetcher },
+  );
+  assert.deepEqual(r.data.youtubeVideos, [{ title: 'Good', url: 'https://www.youtube.com/watch?v=2', date: '2026-10-01T11:00:00.000Z' }]);
+});
