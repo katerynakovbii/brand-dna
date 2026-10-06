@@ -45,3 +45,25 @@ test('compareRows tolerates a failed report', () => {
   assert.ok(rows.every((r) => r.b === '—'));
   assert.ok(rows.every((r) => r.better === null));
 });
+
+test('malformed inputs do not crash (Review Focus #6)', () => {
+  // compareRows with non-array tags and non-string values
+  const rowsWithBadTags = compareRows(rep({ positioning: { statement: 'S', audience: null, tags: 'abc', phrases: ['a', 'b'] } }), rep());
+  const byLabel = Object.fromEntries(rowsWithBadTags.map((r) => [r.label, r]));
+  assert.equal(byLabel['Archetypes'].a, '—');
+
+  // compareRows with non-numeric score and non-numeric total
+  const rowsWithBadScore = compareRows(
+    rep({ touchpoints: { score: 'abc' }, mentions: { d7: { total: 'x', capped: false }, d30: { total: 5, capped: false }, d60: { total: 100, capped: true } } }),
+    rep()
+  );
+  const byLabel2 = Object.fromEntries(rowsWithBadScore.map((r) => [r.label, r]));
+  assert.equal(byLabel2['Touchpoint score'].a, '—');
+  assert.equal(byLabel2['Mentions — 7 days'].a, '—');
+  assert.equal(byLabel2['Mentions — 7 days'].better, null);
+});
+
+test('kindLabel returns string for any input', () => {
+  assert.equal(typeof kindLabel('constructor'), 'string');
+  assert.equal(kindLabel('constructor'), 'constructor');
+});

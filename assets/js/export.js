@@ -1,3 +1,5 @@
+import { safeHref } from './format.js';
+
 export function csvEscape(v) {
   let s = String(v ?? '');
   if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; // stop spreadsheets from evaluating formulas
@@ -6,13 +8,15 @@ export function csvEscape(v) {
 
 const line = (cells) => cells.map(csvEscape).join(',');
 
+const items = (r) => (Array.isArray(r?.mentions?.items) ? r.mentions.items.filter((m) => m && typeof m === 'object') : []);
+
 export function mentionsCsv(report) {
-  const rows = (report.mentions?.items ?? []).map((m) => line([m.date, m.source, m.title, m.url]));
+  const rows = items(report).map((m) => line([String(m.date ?? ''), String(m.source ?? ''), String(m.title ?? ''), safeHref(m.url) ?? '']));
   return [line(['date', 'source', 'title', 'url']), ...rows].join('\r\n') + '\r\n';
 }
 
 export function compareCsv(a, b) {
-  const rows = [a, b].flatMap((r) => (r.mentions?.items ?? []).map((m) => line([r.input?.name ?? '', m.date, m.source, m.title, m.url])));
+  const rows = [a, b].flatMap((r) => items(r).map((m) => line([String(r?.input?.name ?? 'brand'), String(m.date ?? ''), String(m.source ?? ''), String(m.title ?? ''), safeHref(m.url) ?? ''])));
   return [line(['brand', 'date', 'source', 'title', 'url']), ...rows].join('\r\n') + '\r\n';
 }
 
@@ -29,10 +33,10 @@ export function slug(s) {
   );
 }
 
-const day = (r) => (r.createdAt ?? '').slice(0, 10) || 'undated';
+const day = (r) => (typeof r?.createdAt === 'string' ? r.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10));
 
-export const fileName = (report, ext) => `brand-dna-${slug(report.input?.name)}-${day(report)}.${ext}`;
-export const compareFileName = (a, b, ext) => `brand-dna-compare-${slug(a.input?.name)}-vs-${slug(b.input?.name)}-${day(a)}.${ext}`;
+export const fileName = (report, ext) => `brand-dna-${slug(report?.input?.name)}-${day(report)}.${ext}`;
+export const compareFileName = (a, b, ext) => `brand-dna-compare-${slug(a?.input?.name)}-vs-${slug(b?.input?.name)}-${day(a)}.${ext}`;
 
 export function downloadText(text, name, mime, doc = globalThis.document) {
   const url = URL.createObjectURL(new Blob([text], { type: mime }));

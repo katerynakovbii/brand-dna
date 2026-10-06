@@ -38,3 +38,34 @@ test('file names', () => {
   assert.equal(compareFileName(report, { input: { name: 'Other' } }, 'csv'), 'brand-dna-compare-ben-jerry-s-vs-other-2026-10-06.csv');
   assert.deepEqual(JSON.parse(reportJson(report)), report);
 });
+
+test('malformed inputs do not crash (Review Focus #6)', () => {
+  // mentionsCsv(null)
+  assert.doesNotThrow(() => mentionsCsv(null));
+  assert.equal(mentionsCsv(null), 'date,source,title,url\r\n');
+
+  // mentionsCsv with items: {}
+  assert.doesNotThrow(() => mentionsCsv({ mentions: { items: {} } }));
+  assert.equal(mentionsCsv({ mentions: { items: {} } }), 'date,source,title,url\r\n');
+
+  // mentionsCsv with malformed items and javascript URL
+  const badItems = mentionsCsv({
+    mentions: { items: [null, { title: 5, url: 'javascript:alert(1)' }] },
+  });
+  assert.doesNotThrow(() => badItems);
+  // Verify the url cell for javascript: is empty and title (non-string) is coerced
+  const lines = badItems.split('\r\n');
+  assert.match(lines[1], /5,$/); // title coerced to '5', url cell empty at end
+
+  // fileName(null)
+  assert.doesNotThrow(() => fileName(null, 'json'));
+  assert.ok(fileName(null, 'json').includes('report'));
+
+  // fileName with createdAt: 7 (non-string)
+  assert.doesNotThrow(() => fileName({ createdAt: 7 }, 'csv'));
+  assert.ok(fileName({ createdAt: 7 }, 'csv').includes('json') === false);
+
+  // compareCsv(null, null)
+  assert.doesNotThrow(() => compareCsv(null, null));
+  assert.equal(compareCsv(null, null), 'brand,date,source,title,url\r\n');
+});
