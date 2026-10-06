@@ -124,7 +124,7 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
 - **Touchpoints:** checklist of website, blog, newsletter/RSS, each social platform. Status per item: `live` (entered + reachable), `found` (discovered on site, not entered — and reachable), `unverified` (entered or discovered on a platform that blocks automated checks, e.g. LinkedIn 999 / Instagram login wall / 403 / 429 — presence assumed, not confirmed), `broken` (entered or linked but unreachable), `missing` (expected for industry, absent). Score = (live + found + unverified) / expected (from `industries.json`, default set if unknown industry), shown 0–100.
 - **Positioning — rules mode:** value proposition = best of H1 / title / meta description; top 10 phrases (unigrams + bigrams, stopwords and generic web words removed, frequency-scored with ×3 boost for title/H1/H2/meta occurrences); matched archetype tags from keyword lists (price-led, premium, enterprise/B2B, consumer, sustainability, innovation, community).
 - **Positioning — AI mode:** enabled when `ANTHROPIC_API_KEY` secret exists. Model `claude-haiku-4-5-20251001` for cost. One call with collected data (truncated to budget) → JSON validated against schema: `statement, audience, differentiators[], tone, siteSocialConsistency, newsSentiment`. Invalid/failed → rules mode, with reason recorded.
-- **Competitors:** candidates scored by co-occurrence frequency with the brand × industry keyword overlap; own brand and generic words excluded; top 5. AI mode re-ranks and adds `reason` and `website` per competitor. Rules mode `website` is a best guess from result links, may be empty.
+- **Competitors:** candidates scored by co-occurrence frequency with the brand × industry keyword overlap; own brand and generic words excluded; top 5. AI mode re-ranks and adds `reason` and `website` per competitor. Rules mode `website` is a best guess from result links, may be empty. `coMentions` = number of competitor-search results mentioning the candidate (a rough signal; full mention counts come from a Compare run).
 
 ## 7. Report schema (summary)
 
@@ -137,7 +137,7 @@ Common interface: `collect(input) → Promise<{source, ok, data, error?}>`. Ever
   "positioning": { "statement", "audience", "differentiators", "tone", "phrases", "tags" },
   "touchpoints": { "score", "items": [{ "kind", "url", "status" }] },
   "mentions": { "d7": {...}, "d30": {...}, "d60": {...}, "items": [{ "date", "source", "title", "url" }] },
-  "competitors": [{ "name", "website", "reason", "mentions30" }],
+  "competitors": [{ "name", "website", "reason", "coMentions" }],
   "sources": [{ "source", "ok", "error" }]
 }
 ```
