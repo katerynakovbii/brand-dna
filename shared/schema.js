@@ -1,4 +1,4 @@
-// Shared by the browser (form validation) and the workflow (re-validation after decrypt).
+// Shared by the browser (form validation) and /api/analyze (re-validation).
 export const SCHEMA_VERSION = 1;
 export const REPORT_ID_RE = /^[A-Za-z0-9_-]{22}$/;
 export const REPORT_KEY_RE = /^[A-Za-z0-9_-]{43}$/;
@@ -35,7 +35,7 @@ export function validateInputs(raw = {}) {
   if (type === 'main' && parentId !== null) errors.parentId = 'Only competitor reports have a parent.';
 
   const name = String(raw.name ?? '').trim();
-  if (!name) errors.name = 'Enter the company name.';
+  if (!name && type === 'competitor') errors.name = 'Enter the company name.';
   else if (name.length > 100) errors.name = 'Name is too long (max 100 characters).';
 
   const websiteRaw = String(raw.website ?? '').trim();
@@ -44,8 +44,7 @@ export function validateInputs(raw = {}) {
   else if (!websiteRaw && type === 'main') errors.website = 'Enter the website.';
 
   const industry = String(raw.industry ?? '').trim();
-  if (!industry) errors.industry = 'Choose or type an industry.';
-  else if (industry.length > 60) errors.industry = 'Industry is too long (max 60 characters).';
+  if (industry.length > 60) errors.industry = 'Industry is too long (max 60 characters).';
 
   const rawSocials = raw.socials ?? {};
   const socials = {};

@@ -10,10 +10,11 @@
     "serve": "npx --yes serve -l 8080 ."
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.1",
     "cheerio": "^1.0.0",
     "fast-xml-parser": "^5.0.0"
   },
   "devDependencies": {
-    "yaml": "^2.9.1"
+    "fake-indexeddb": "^6.2.5"
   }
 }

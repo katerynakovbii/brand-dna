@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>Brand DNA</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,11 +16,10 @@
   <header class="topbar no-print">
     <a class="logo" href="#/">Brand DNA</a>
     <nav>
-      <a href="#/" data-nav="dashboard">My reports</a>
-      <a href="#/new" data-nav="new">New analysis</a>
-      <a href="#/settings" data-nav="settings">Settings</a>
+      <a href="#/reports" data-nav="reports">My reports</a>
+      <a href="#/" data-nav="home">New analysis</a>
     </nav>
   </header>
-  <main id="app" class="container" aria-live="polite"></main>
+  <main id="app" class="container"></main>
 </body>
 </html>

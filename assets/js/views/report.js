@@ -1,77 +1,54 @@
 import { h } from '../components/h.js';
-import { card, button, copyButton, pill, errorBox, runningCard, sparkline, scoreRing, downloadBar, linkButton } from '../components/ui.js';
-import { loadReport, pollReport, recordResult, isStale, startAnalysis } from '../analysis.js';
-import { reportHash, compareHash, absoluteLink } from '../router.js';
+import { card, button, pill, errorBox, sparkline, scoreRing, linkButton, menuButton, progressList } from '../components/ui.js';
+import { compareHash } from '../router.js';
 import { formatDate, safeHref, displayHost, SENTIMENT_LABELS } from '../format.js';
-import { mentionsCsv, reportJson, fileName, downloadText } from '../export.js';
-import { touchpointRows, mentionsView, sourceRows, competitorRows, competitorInputs, validLink } from './report-model.js';
+import { touchpointRows, mentionsView, sourceRows, competitorRows, competitorInputs } from './report-model.js';
+import { shareEntry, downloadItems } from './actions.js';
 
-const CANT_OPEN = "This report can't be opened — the link is incomplete or invalid.";
 const DASH = '—';
+const SECTIONS = [['positioning', 'Positioning'], ['touchpoints', 'Touchpoints'], ['mentions', 'Mentions'], ['competitors', 'Competitors'], ['sources', 'Sources']];
 
 const text = (x) => (typeof x === 'string' && x ? x : null);
 const strings = (x) => (Array.isArray(x) ? x.filter((v) => typeof v === 'string' && v) : []);
-const msg = (e) => (typeof e?.message === 'string' ? e.message : 'unknown error');
+const section = (key, ...children) => h('div', { id: `sec-${key}`, class: 'report-section' }, ...children);
 
-// Shared by report and compare views: resolves a report, polling while its run is in progress.
-export async function renderLoading(root, { id, key, ctx, signal, onReady }) {
-  if (!validLink(id, key)) return root.append(errorBox(CANT_OPEN));
-  const ready = (report) => {
-    if (report?.id !== id) return root.append(errorBox(CANT_OPEN));
-    return onReady(report);
-  };
-  let r;
-  try {
-    r = await loadReport({ id, key, fetchText: ctx.fetchText });
-  } catch (e) {
-    if (signal?.aborted) return;
-    root.append(errorBox(e?.name === 'TokenRejectedError' ? msg(e) : `Couldn't load the report: ${msg(e)}`));
-    return;
-  }
-  if (signal?.aborted) return;
-  if (r.state === 'invalid-key') return root.append(errorBox(CANT_OPEN));
-  if (r.state === 'ready') return ready(r.report);
-
-  const entry = ctx.library.get(id);
-  if (!entry || entry.status !== 'running') return root.append(errorBox('Report not found.'));
-  if (isStale(entry)) return root.append(errorBox('No report after 15 minutes. The analysis may have failed to start — check the run on GitHub.', { actionsUrl: ctx.actionsUrl }));
-
-  const running = runningCard({ name: entry.name, actionsUrl: ctx.actionsUrl, startedAt: entry.createdAt });
-  root.append(running);
-  let p;
-  try {
-    p = await pollReport({ id, key, fetchText: ctx.fetchText, signal, startedAt: Date.parse(entry.createdAt) });
-  } catch (e) {
-    if (signal?.aborted) return;
-    running.remove();
-    return root.append(errorBox(`Couldn't load the report: ${msg(e)}`));
-  }
-  if (p.state === 'aborted' || signal?.aborted) return;
-  running.remove();
-  if (p.state === 'ready') return ready(p.report);
-  if (p.state === 'invalid-key') return root.append(errorBox(CANT_OPEN));
-  if (p.state === 'timeout') return root.append(errorBox('No report after 15 minutes. The analysis may have failed to start — check the run on GitHub.', { actionsUrl: ctx.actionsUrl }));
-  root.append(errorBox(text(p.message) ?? 'Something went wrong while loading the report.'));
-}
-
-function header(report, key) {
-  const hash = reportHash(report.id, key);
+function summaryCard(report, ctx, { readOnly, entry }) {
   const site = safeHref(report.input?.website);
-  return card({},
+  const tp = report.touchpoints;
+  const score = Number.isFinite(tp?.score) ? tp.score : null;
+  const competitors = Array.isArray(report.competitors) ? report.competitors.filter((c) => c && typeof c.name === 'string').length : 0;
+  const stat = (value, label) => h('div', { class: 'stat' }, h('strong', { text: String(value) }), h('span', { class: 'muted small', text: label }));
+  const shareTarget = entry ?? { id: report.id, report, shareUrl: null };
+  return card({ className: 'summary' },
     h('div', { class: 'report-head' },
       h('div', {},
         h('h1', { text: text(report.input?.name) ?? 'Report' }),
         h('div', { class: 'report-meta' },
-          site ? h('a', { href: site, text: displayHost(site) }) : null,
+          site ? h('a', { href: site, text: displayHost(site), rel: 'noopener', target: '_blank' }) : null,
           h('span', { text: formatDate(report.createdAt) }),
+          text(report.input?.industry) ? h('span', { text: report.input.industry }) : null,
           report.type === 'competitor' ? pill('Competitor report', 'muted') : null,
           report.status === 'ok' ? pill(report.mode === 'ai' ? 'AI analysis' : 'Rules-based', 'accent') : null)),
-      h('div', { class: 'row-actions no-print' }, copyButton(absoluteLink(hash), 'Copy private link'))),
-    downloadBar([
-      button('Download PDF', { onClick: () => window.print() }),
-      button('JSON', { onClick: () => downloadText(reportJson(report), fileName(report, 'json'), 'application/json') }),
-      button('CSV (mentions)', { onClick: () => downloadText(mentionsCsv(report), fileName(report, 'csv'), 'text/csv') }),
-    ]));
+      h('div', { class: 'summary-actions no-print' },
+        readOnly ? null : button('Share', { primary: true, onClick: () => shareEntry(shareTarget, ctx) }),
+        menuButton('Download', downloadItems(report)))),
+    report.status === 'failed' ? null : [
+      h('p', { class: 'statement', text: text(report.positioning?.statement) ?? 'No positioning statement found on the website.' }),
+      h('div', { class: 'summary-stats' },
+        stat(score ?? DASH, 'touchpoint score'),
+        stat(mentionsView(report.mentions, 30).big, 'mentions · 30 days'),
+        stat(competitors, competitors === 1 ? 'competitor' : 'competitors')),
+    ]);
+}
+
+function sectionNav(targets) {
+  return h('nav', { class: 'section-nav no-print', 'aria-label': 'Report sections' },
+    SECTIONS.map(([key, label]) => h('button', {
+      type: 'button',
+      class: 'btn-link',
+      text: label,
+      onClick: () => targets[key].scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    })));
 }
 
 function positioningCard(report) {
@@ -82,7 +59,6 @@ function positioningCard(report) {
   const phrases = strings(p.phrases);
   const sentiment = typeof p.newsSentiment === 'string' && Object.hasOwn(SENTIMENT_LABELS, p.newsSentiment) ? SENTIMENT_LABELS[p.newsSentiment] : null;
   return card({ title: 'Positioning' },
-    h('p', { class: 'statement', text: text(p.statement) ?? 'No positioning statement found on the website.' }),
     h('dl', { class: 'kv' },
       kv('Audience', p.audience),
       kv('Differentiators', diffs.length ? diffs.join(' · ') : null),
@@ -112,7 +88,7 @@ function mentionsCard(report) {
   function show(days) {
     buttons.forEach((b, i) => b.setAttribute('aria-pressed', String([7, 30, 60][i] === days)));
     const v = mentionsView(report.mentions, days);
-    body.replaceChildren(
+    body.replaceChildren(...[
       h('div', { class: 'mentions-top' },
         h('div', {}, h('div', { class: 'big-number', text: v.big }), h('div', { class: 'muted small', text: `mentions in the last ${days} days` })),
         v.weekly.length > 1 ? sparkline(v.weekly) : null,
@@ -122,55 +98,61 @@ function mentionsCard(report) {
         ? h('ul', { class: 'list' }, v.headlines.map((m) => h('li', {}, h('div', { class: 'row-main' },
           m.href ? h('a', { href: m.href, text: m.title }) : h('span', { text: m.title }),
           h('span', { class: 'muted small', text: m.meta })))))
-        : h('p', { class: 'muted', text: 'No mentions found in this period.' }));
+        : h('p', { class: 'muted', text: 'No mentions found in this period.' }),
+    ].filter(Boolean));
   }
   show(30);
   return card({ title: 'Mentions', actions: h('div', { class: 'toggle', role: 'group', 'aria-label': 'Time window' }, buttons) }, body);
 }
 
-function competitorsCard(report, key, ctx, signal) {
-  const status = h('div', { 'aria-live': 'polite' });
-  const rows = competitorRows({ report, library: ctx.library, hasToken: !!ctx.github });
+function competitorRow(report, row, ctx, signal, readOnly) {
+  const actions = h('div', { class: 'row-actions no-print' });
+  const status = h('div', { class: 'row-status', 'aria-live': 'polite' });
+  const compareBtn = (entryId) => button('Compare', { primary: true, onClick: () => ctx.navigate(compareHash(report.id, entryId)) });
 
-  async function onCompare(row, btn) {
-    if (row.existing) return ctx.navigate(compareHash(report.id, key, row.existing.reportId, row.existing.reportKey));
-    btn.disabled = true;
-    btn.textContent = 'Starting…';
-    try {
-      const c = report.competitors.find((x) => x?.name === row.name);
-      const publicJwk = await ctx.publicJwk();
-      if (signal?.aborted) return;
-      const r = await startAnalysis({ inputs: competitorInputs(report, c), github: ctx.github, library: ctx.library, publicJwk });
-      if (signal?.aborted) return;
-      if (!r.ok) throw new Error(Object.values(r.errors).join(' '));
-      ctx.navigate(compareHash(report.id, key, r.entry.reportId, r.entry.reportKey));
-    } catch (e) {
-      if (signal?.aborted) return;
-      status.replaceChildren(errorBox(e?.name === 'TokenRejectedError' ? msg(e) : `Couldn't start the competitor analysis: ${msg(e)}`));
-      btn.disabled = false;
-      btn.textContent = 'Compare';
+  async function analyze() {
+    const progress = progressList();
+    actions.replaceChildren(h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { class: 'muted small', text: 'Analyzing…' }));
+    status.replaceChildren(progress.el);
+    const c = report.competitors.find((x) => x?.name === row.name);
+    const r = await ctx.runAnalysis({
+      inputs: competitorInputs(report, c),
+      onEvent: (e) => { if (e?.type === 'progress') progress.update(e.source, e.state); },
+      signal,
+    });
+    if (signal?.aborted || r.aborted) return;
+    if (r.ok) {
+      await ctx.library.put(r.report).catch(() => {});
+      status.replaceChildren();
+      actions.replaceChildren(compareBtn(r.report.id));
+      return;
     }
+    const message = r.message ?? Object.values(r.errors ?? {}).join(' ') ?? 'The analysis failed.';
+    actions.replaceChildren(analyzeBtn());
+    status.replaceChildren(errorBox(message || 'The analysis failed.', { onRetry: analyze }));
   }
+  const analyzeBtn = () => button('Analyze', { onClick: analyze, title: `Run the same analysis for ${row.name}` });
 
+  if (!readOnly) actions.append(row.existing ? compareBtn(row.existing.id) : analyzeBtn());
+  return h('li', { class: 'competitor' },
+    h('div', { class: 'row-main' },
+      h('strong', { text: row.name }),
+      row.href ? h('a', { class: 'small', href: row.href, text: row.host }) : null,
+      row.reason ? h('span', { class: 'muted small', text: row.reason }) : null,
+      Number.isFinite(row.coMentions) && row.coMentions > 0 ? h('span', { class: 'muted small', text: `Mentioned together ${row.coMentions}×` }) : null),
+    actions,
+    status);
+}
+
+function competitorsCard(report, existing, ctx, signal, readOnly) {
+  const rows = competitorRows({ report, existing });
   return card({ title: 'Competitors' },
     rows.length
-      ? h('ul', { class: 'list' }, rows.map((row) => {
-        const btn = button(row.action === 'open' ? 'Open comparison' : 'Compare', {
-          primary: row.action !== 'disabled',
-          disabled: row.action === 'disabled',
-          title: row.action === 'disabled' ? 'Add a GitHub token in Settings to analyze competitors' : null,
-        });
-        btn.addEventListener('click', () => onCompare(row, btn));
-        return h('li', {},
-          h('div', { class: 'row-main' },
-            h('strong', { text: row.name }),
-            row.href ? h('a', { class: 'small', href: row.href, text: row.host }) : null,
-            h('span', { class: 'muted small', text: row.reason })),
-          h('div', { class: 'row-actions no-print' }, btn));
-      }))
-      : h('p', { class: 'muted', text: 'No competitors could be identified from public data.' }),
-    !ctx.github && rows.some((r) => r.action === 'disabled') ? h('p', { class: 'muted small no-print' }, 'Add a GitHub token in ', h('a', { href: '#/settings', text: 'Settings' }), ' to analyze competitors.') : null,
-    status);
+      ? [
+        readOnly ? null : h('p', { class: 'muted small no-print', text: 'Analyze a competitor to compare it side by side.' }),
+        h('ul', { class: 'list' }, rows.map((row) => competitorRow(report, row, ctx, signal, readOnly))),
+      ]
+      : h('p', { class: 'muted', text: 'No competitors could be identified from public data.' }));
 }
 
 function sourcesCard(report) {
@@ -181,26 +163,32 @@ function sourcesCard(report) {
     h('p', { class: 'muted small', text: 'Mentions come from Google News, Bing News, Hacker News and Reddit. Social follower counts are not collected because the platforms block automated access.' }));
 }
 
-export function renderReport(root, report, key, ctx, signal) {
-  root.append(header(report, key));
+export async function renderReport(root, report, ctx, signal, { readOnly = false, entry = null } = {}) {
+  root.append(summaryCard(report, ctx, { readOnly, entry }));
   if (report.status === 'failed') {
-    root.append(errorBox(text(report.error) ?? 'The analysis failed.', { actionsUrl: ctx.actionsUrl }));
-    if (ctx.github && report.input) root.append(h('p', {}, linkButton('Start a new analysis', '#/new', { primary: true })));
+    root.append(errorBox(text(report.error) ?? 'The analysis failed.'), h('p', {}, linkButton('New analysis', '#/', { primary: true })));
     return;
   }
-  root.append(positioningCard(report), h('div', { class: 'grid-2' }, touchpointsCard(report), mentionsCard(report)), competitorsCard(report, key, ctx, signal), sourcesCard(report));
+  const existing = readOnly ? [] : await ctx.library.list().catch(() => []);
+  if (signal?.aborted) return;
+  const t = {
+    positioning: section('positioning', positioningCard(report)),
+    touchpoints: section('touchpoints', touchpointsCard(report)),
+    mentions: section('mentions', mentionsCard(report)),
+    competitors: section('competitors', competitorsCard(report, existing, ctx, signal, readOnly)),
+    sources: section('sources', sourcesCard(report)),
+  };
+  root.append(sectionNav(t), t.positioning, h('div', { class: 'grid-2' }, t.touchpoints, t.mentions), t.competitors, t.sources);
 }
 
 export async function render(root, route, ctx, signal) {
-  await renderLoading(root, {
-    id: route.id,
-    key: route.key,
-    ctx,
-    signal,
-    onReady: (report) => {
-      recordResult(ctx.library, report, route.key);
-      if (signal?.aborted) return;
-      renderReport(root, report, route.key, ctx, signal);
-    },
-  });
+  const entry = await ctx.library.get(route.id).catch(() => null);
+  if (signal?.aborted) return;
+  if (!entry?.report) {
+    root.append(card({ title: 'Report not found' },
+      h('p', { text: 'Report not found in this browser. Reports are saved only in the browser that ran them — open a shared link instead, or run the analysis again.' }),
+      h('div', { class: 'row-actions' }, linkButton('New analysis', '#/', { primary: true }), linkButton('My reports', '#/reports'))));
+    return;
+  }
+  await renderReport(root, entry.report, ctx, signal, { entry });
 }
