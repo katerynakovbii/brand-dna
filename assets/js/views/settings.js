@@ -2,7 +2,7 @@ import { h } from '../components/h.js';
 import { card, button, notice } from '../components/ui.js';
 import { createGithub } from '../github.js';
 
-export function render(root, _route, ctx) {
+export function render(root, _route, ctx, signal) {
   const input = h('input', { type: 'password', id: 'token', autocomplete: 'off', spellcheck: 'false', placeholder: 'github_pat_…', value: ctx.settings.getToken() });
   const status = h('div', { 'aria-live': 'polite' });
   const show = (msg, tone) => status.replaceChildren(notice(msg, tone));
@@ -22,8 +22,10 @@ export function render(root, _route, ctx) {
       show('Testing…', 'info');
       try {
         const r = await createGithub({ ...ctx.repo, token: input.value.trim() }).testToken();
+        if (signal?.aborted) return;
         show(r.message, r.ok ? 'info' : 'error');
       } catch {
+        if (signal?.aborted) return;
         show("Couldn't reach GitHub. Check your connection and try again.", 'error');
       }
     },

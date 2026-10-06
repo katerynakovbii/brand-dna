@@ -74,7 +74,10 @@ export async function render(root, _route, ctx, signal) {
     submit.disabled = true;
     submit.textContent = 'Starting…';
     try {
-      const r = await startAnalysis({ inputs: formToInputs(new FormData(form)), github: ctx.github, library: ctx.library, publicJwk: await ctx.publicJwk() });
+      const publicJwk = await ctx.publicJwk();
+      if (signal?.aborted) return;
+      const r = await startAnalysis({ inputs: formToInputs(new FormData(form)), github: ctx.github, library: ctx.library, publicJwk });
+      if (signal?.aborted) return;
       if (!r.ok) {
         for (const [k, msg] of Object.entries(r.errors)) {
           const target = SOCIAL_FIELDS.includes(k) || ['name', 'website', 'industry', 'other'].includes(k) ? k : null;
@@ -88,10 +91,13 @@ export async function render(root, _route, ctx, signal) {
       }
       ctx.navigate(reportHash(r.entry.reportId, r.entry.reportKey));
     } catch (err) {
+      if (signal?.aborted) return;
       status.append(errorBox(err.name === 'TokenRejectedError' ? err.message : `Couldn't start the analysis: ${err.message}`));
     } finally {
-      submit.disabled = false;
-      submit.textContent = 'Run analysis';
+      if (!signal?.aborted) {
+        submit.disabled = false;
+        submit.textContent = 'Run analysis';
+      }
     }
   });
 

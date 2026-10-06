@@ -34,7 +34,7 @@ export async function renderLoading(root, { id, key, ctx, signal, onReady }) {
 
   const entry = ctx.library.get(id);
   if (!entry || entry.status !== 'running') return root.append(errorBox('Report not found.'));
-  if (isStale(entry)) return root.append(errorBox('No report after 10 minutes. The analysis may have failed to start — check the run on GitHub.', { actionsUrl: ctx.actionsUrl }));
+  if (isStale(entry)) return root.append(errorBox('No report after 15 minutes. The analysis may have failed to start — check the run on GitHub.', { actionsUrl: ctx.actionsUrl }));
 
   const running = runningCard({ name: entry.name, actionsUrl: ctx.actionsUrl, startedAt: entry.createdAt });
   root.append(running);
@@ -50,7 +50,7 @@ export async function renderLoading(root, { id, key, ctx, signal, onReady }) {
   running.remove();
   if (p.state === 'ready') return ready(p.report);
   if (p.state === 'invalid-key') return root.append(errorBox(CANT_OPEN));
-  if (p.state === 'timeout') return root.append(errorBox('No report after 10 minutes. The analysis may have failed to start — check the run on GitHub.', { actionsUrl: ctx.actionsUrl }));
+  if (p.state === 'timeout') return root.append(errorBox('No report after 15 minutes. The analysis may have failed to start — check the run on GitHub.', { actionsUrl: ctx.actionsUrl }));
   root.append(errorBox(text(p.message) ?? 'Something went wrong while loading the report.'));
 }
 

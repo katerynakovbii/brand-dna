@@ -32,7 +32,17 @@ export function createContext({
     github,
     hasToken: !!token,
     actionsUrl: repo ? actionsUrlFor(repo) : null,
-    fetchText: (id) => (github ? github.fetchReport(id) : fetchPublicReport({ id, ...repo, pageBase, fetchImpl })),
+    fetchText: async (id) => {
+      const pub = () => fetchPublicReport({ id, ...repo, pageBase, fetchImpl });
+      if (!github) return pub();
+      try {
+        return await github.fetchReport(id);
+      } catch (e) {
+        // An expired or invalid stored token must not block public shared links.
+        if (e?.name === 'TokenRejectedError') return pub();
+        throw e;
+      }
+    },
     publicJwk: () =>
       (jwk ??= getJson('keys/workflow-public.jwk', 'Setup incomplete: keys/workflow-public.jwk is missing. Run scripts/setup.mjs (see README).')),
     industries: () => (table ??= getJson('collector/industries.json', 'Could not load the industry list.')),

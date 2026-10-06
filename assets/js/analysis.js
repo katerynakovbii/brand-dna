@@ -2,7 +2,7 @@ import { newReportId, generateReportKey, encryptForWorkflow, decryptReport } fro
 import { validateInputs, REPORT_ID_RE, REPORT_KEY_RE } from '../../shared/schema.js';
 
 export const POLL_INTERVAL_MS = 15000;
-export const POLL_TIMEOUT_MS = 600000;
+export const POLL_TIMEOUT_MS = 15 * 60 * 1000;
 
 export async function startAnalysis({ inputs, github, library, publicJwk, now = new Date() }) {
   const v = validateInputs(inputs);
@@ -68,12 +68,14 @@ export function recordResult(library, report, key) {
   if (!report || typeof report !== 'object' || typeof report.id !== 'string') return null;
   try {
     const existing = library.get(report.id);
+    // A crashed/timed-out run writes a bare failure report with no parent; keep the local competitor link.
+    const keepLink = existing?.type === 'competitor' && existing.parentId && report.parentId == null;
     return library.upsert({
       reportId: report.id,
       reportKey: key,
       name: report.input?.name ?? existing?.name ?? 'Untitled',
-      type: report.type,
-      parentId: report.parentId,
+      type: keepLink ? existing.type : report.type,
+      parentId: keepLink ? existing.parentId : report.parentId,
       createdAt: report.createdAt ?? existing?.createdAt,
       status: report.status,
     });

@@ -26,6 +26,7 @@ function render() {
   Promise.resolve()
     .then(() => views[route.name].render(root, route, ctx, controller.signal))
     .catch((e) => {
+      if (controller.signal.aborted) return;
       console.error(e);
       root.replaceChildren(errorBox(`Something went wrong: ${e.message}`));
     });

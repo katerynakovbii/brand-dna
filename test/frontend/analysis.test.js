@@ -90,7 +90,7 @@ test('recordResult and isStale', () => {
   const e = recordResult(library, { id, status: 'failed', type: 'main', parentId: null, input: null, createdAt: '2026-10-06T00:02:00.000Z' }, key);
   assert.equal(e.status, 'failed');
   assert.equal(e.name, 'Acme', 'keeps local name when report has no input');
-  assert.equal(isStale({ status: 'running', createdAt: '2026-10-06T00:00:00Z' }, Date.parse('2026-10-06T00:11:00Z')), true);
+  assert.equal(isStale({ status: 'running', createdAt: '2026-10-06T00:00:00Z' }, Date.parse('2026-10-06T00:16:00Z')), true);
   assert.equal(isStale({ status: 'running', createdAt: '2026-10-06T00:00:00Z' }, Date.parse('2026-10-06T00:05:00Z')), false);
   assert.equal(isStale({ status: 'ok', createdAt: '2020-01-01T00:00:00Z' }), false);
 });
