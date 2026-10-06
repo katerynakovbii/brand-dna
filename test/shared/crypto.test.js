@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toB64url, fromB64url, newReportId, generateReportKey,
-  encryptReport, decryptReport, generateWorkflowKeyPair,
-  encryptForWorkflow, decryptFromBrowser,
+  encryptReport, decryptReport,
 } from '../../shared/crypto.js';
 
 test('base64url round-trips all lengths without padding', () => {
@@ -48,21 +47,4 @@ test('report decrypt rejects garbage and malformed keys', async () => {
   await assert.rejects(decryptReport('not json', generateReportKey()), /decrypt failed/);
   const text = await encryptReport({ a: 1 }, generateReportKey());
   await assert.rejects(decryptReport(text, 'short'), /decrypt failed/);
-});
-
-test('workflow hybrid encryption round-trip', async () => {
-  const { publicJwk, privateJwk } = await generateWorkflowKeyPair();
-  assert.equal(publicJwk.kty, 'RSA');
-  assert.equal(publicJwk.d, undefined);
-  const payload = { inputs: { name: 'Acme' }, reportKey: generateReportKey() };
-  const text = await encryptForWorkflow(payload, publicJwk);
-  assert.doesNotMatch(text, /Acme/);
-  assert.deepEqual(await decryptFromBrowser(text, privateJwk), payload);
-});
-
-test('workflow decrypt rejects other private key', async () => {
-  const a = await generateWorkflowKeyPair();
-  const b = await generateWorkflowKeyPair();
-  const text = await encryptForWorkflow({ x: 1 }, a.publicJwk);
-  await assert.rejects(decryptFromBrowser(text, b.privateJwk), /decrypt failed/);
 });

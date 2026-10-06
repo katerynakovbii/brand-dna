@@ -50,36 +50,3 @@ export async function decryptReport(text, keyB64) {
   }
 }
 
-const RSA = { name: 'RSA-OAEP', hash: 'SHA-256' };
-
-export async function generateWorkflowKeyPair() {
-  const pair = await subtle.generateKey(
-    { ...RSA, modulusLength: 3072, publicExponent: new Uint8Array([1, 0, 1]) },
-    true,
-    ['encrypt', 'decrypt'],
-  );
-  return {
-    publicJwk: await subtle.exportKey('jwk', pair.publicKey),
-    privateJwk: await subtle.exportKey('jwk', pair.privateKey),
-  };
-}
-
-export async function encryptForWorkflow(obj, publicJwk) {
-  const pub = await subtle.importKey('jwk', publicJwk, RSA, false, ['encrypt']);
-  const raw = randomBytes(32);
-  const body = await aesEncrypt(raw, obj);
-  const wk = new Uint8Array(await subtle.encrypt({ name: 'RSA-OAEP' }, pub, raw));
-  return JSON.stringify({ v: 1, wk: toB64url(wk), ...body });
-}
-
-export async function decryptFromBrowser(text, privateJwk) {
-  try {
-    const { v, wk, iv, ct } = JSON.parse(text);
-    if (v !== 1) throw new Error('version');
-    const priv = await subtle.importKey('jwk', privateJwk, RSA, false, ['decrypt']);
-    const raw = new Uint8Array(await subtle.decrypt({ name: 'RSA-OAEP' }, priv, fromB64url(wk)));
-    return await aesDecrypt(raw, iv, ct);
-  } catch {
-    throw new Error('decrypt failed');
-  }
-}
