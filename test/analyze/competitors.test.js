@@ -40,9 +40,30 @@ test('missing title/snippet/invalid url doesn\'t throw', () => {
   const results = [
     { title: undefined, url: 'not a url', snippet: null },
     { title: 'Asana vs Acme', url: 'https://asana.com', snippet: undefined },
+    null,
+    42,
+    {},
   ];
   assert.doesNotThrow(() => {
     const r = rankCompetitors({ name: 'Acme', results, industryKeywords: [] });
     assert.ok(Array.isArray(r));
   });
+});
+
+test('handles undefined industryKeywords', () => {
+  const results = [{ title: 'Asana vs Acme', url: 'https://asana.com', snippet: 'test' }];
+  assert.doesNotThrow(() => {
+    const r = rankCompetitors({ name: 'Acme', results, industryKeywords: undefined });
+    assert.ok(Array.isArray(r));
+  });
+});
+
+test('text join with space prevents domain fusion (G2.Popular)', () => {
+  // With space after period, "G2. Popular" splits so G2 and Popular don't fuse
+  const candidates = extractCandidates('Foo - G2. Popular alternatives');
+  assert.ok(!candidates.some((c) => c.name.includes('G2.Popular')));
+  // rankCompetitors joins title and snippet with period+space, preventing fusion
+  const results = [{ title: 'X - G2', url: 'https://x.com', snippet: 'Popular alternatives' }];
+  const r = rankCompetitors({ name: 'Acme', results, industryKeywords: [] });
+  assert.ok(!r.some((c) => c.name.includes('.')));
 });

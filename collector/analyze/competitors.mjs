@@ -43,14 +43,18 @@ function domainBase(url) {
 }
 
 export function rankCompetitors({ name, results, industryKeywords }) {
+  const safeName = String(name ?? '');
+  const safeResults = Array.isArray(results) ? results : [];
+  const safeKeywords = Array.isArray(industryKeywords) ? industryKeywords : [];
   const agg = new Map();
-  for (const r of results) {
-    const text = `${String(r.title ?? '')}.${String(r.snippet ?? '')}`;
+  for (const r of safeResults) {
+    if (!r || typeof r !== 'object') continue;
+    const text = `${String(r.title ?? '')}. ${String(r.snippet ?? '')}`;
     const lower = text.toLowerCase();
-    const overlap = industryKeywords.some((k) => lower.includes(k)) ? 1.5 : 1;
+    const overlap = safeKeywords.some((k) => lower.includes(k)) ? 1.5 : 1;
     const best = new Map();
     for (const c of extractCandidates(text)) {
-      const clean = cleanCandidate(c.name, name);
+      const clean = cleanCandidate(c.name, safeName);
       if (!clean) continue;
       const key = clean.toLowerCase();
       if ((best.get(key)?.weight ?? 0) < c.weight) best.set(key, { name: clean, weight: c.weight });
@@ -71,7 +75,7 @@ export function rankCompetitors({ name, results, industryKeywords }) {
     .map((a) => ({
       name: a.name,
       website: a.website,
-      reason: `Appears alongside ${name} in ${a.coMentions} search result${a.coMentions === 1 ? '' : 's'}`,
+      reason: `Appears alongside ${safeName} in ${a.coMentions} search result${a.coMentions === 1 ? '' : 's'}`,
       coMentions: a.coMentions,
       score: a.score,
     }));

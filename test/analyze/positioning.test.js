@@ -38,3 +38,13 @@ test('no site → empty positioning', () => {
     statement: null, audience: null, differentiators: [], tone: null, siteSocialConsistency: null, newsSentiment: null, phrases: [], tags: [],
   });
 });
+
+test('malformed site fields and undefined name don\'t throw', () => {
+  const badSite = { title: 5, h1: 'str', h2: [null, 'Ok heading'], og: null, text: null };
+  assert.doesNotThrow(() => {
+    const r = positioningRules({ site: badSite, name: undefined });
+    assert.ok(Array.isArray(r.differentiators));
+    assert.ok(Array.isArray(r.phrases));
+    assert.ok(Array.isArray(r.tags));
+  });
+});

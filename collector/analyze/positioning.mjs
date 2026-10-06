@@ -26,7 +26,14 @@ function tokenize(text, exclude) {
     .map((w) => (w.length < 3 || STOP.has(w) || exclude.has(w) || /^\d+$/.test(w) ? null : w));
 }
 
-const boostedText = (site) => [site.title, site.description, ...(site.h1 || []), ...(site.h2 || [])].filter(Boolean).join(' . ');
+const boostedText = (site) => {
+  const parts = [];
+  if (typeof site.title === 'string') parts.push(site.title);
+  if (typeof site.description === 'string') parts.push(site.description);
+  if (Array.isArray(site.h1)) parts.push(...site.h1.filter((x) => typeof x === 'string'));
+  if (Array.isArray(site.h2)) parts.push(...site.h2.filter((x) => typeof x === 'string'));
+  return parts.filter(Boolean).join(' . ');
+};
 
 export function extractPhrases(site, { exclude = [], limit = 10 } = {}) {
   const ex = new Set(exclude.map((x) => x.toLowerCase()));
@@ -58,16 +65,23 @@ function countHits(text, words) {
 }
 
 function pickStatement(site, name) {
-  const brand = name.toLowerCase();
+  const safeName = String(name ?? '');
+  const brand = safeName.toLowerCase();
   const words = (s) => s.split(/\s+/).length;
-  const titleParts = (site.title || '').split(/\s[|\-–—:]\s/).map((s) => s.trim()).filter((s) => s.toLowerCase() !== brand);
-  const candidates = [site.h1?.[0], ...titleParts, site.og?.title, site.description].filter(Boolean);
+  const safeTitle = typeof site.title === 'string' ? site.title : '';
+  const safeDesc = typeof site.description === 'string' ? site.description : '';
+  const titleParts = safeTitle.split(/\s[|\-–—:]\s/).map((s) => s.trim()).filter((s) => s.toLowerCase() !== brand);
+  const h1First = Array.isArray(site.h1) ? site.h1.find((x) => typeof x === 'string') : undefined;
+  const ogTitle = site.og && typeof site.og.title === 'string' ? site.og.title : undefined;
+  const candidates = [h1First, ...titleParts, ogTitle, safeDesc].filter(Boolean);
   return candidates.find((c) => c.toLowerCase() !== brand && words(c) >= 3 && words(c) <= 30) || candidates[0] || null;
 }
 
 export function positioningRules({ site, name }) {
   if (!site) return { ...EMPTY };
-  const lower = `${site.text || ''} ${boostedText(site)}`.toLowerCase();
+  const safeName = String(name ?? '');
+  const safeText = typeof site.text === 'string' ? site.text : '';
+  const lower = `${safeText} ${boostedText(site)}`.toLowerCase();
   const tags = Object.entries(ARCHETYPES)
     .map(([tag, words]) => [tag, countHits(lower, words)])
     .filter(([, n]) => n >= 3)
@@ -75,13 +89,14 @@ export function positioningRules({ site, name }) {
     .slice(0, 3)
     .map(([tag]) => tag);
   const audience = tags.includes('enterprise / B2B') ? 'Businesses and teams (B2B)' : tags.includes('consumer') ? 'Consumers' : null;
-  const differentiators = (site.h2 || []).filter((h) => { const n = h.split(/\s+/).length; return n >= 2 && n <= 12; }).slice(0, 3);
+  const h2Array = Array.isArray(site.h2) ? site.h2.filter((x) => typeof x === 'string') : [];
+  const differentiators = h2Array.filter((h) => { const n = h.split(/\s+/).length; return n >= 2 && n <= 12; }).slice(0, 3);
   return {
     ...EMPTY,
-    statement: pickStatement(site, name),
+    statement: pickStatement(site, safeName),
     audience,
     differentiators,
-    phrases: extractPhrases(site, { exclude: name.split(/\s+/) }),
+    phrases: extractPhrases(site, { exclude: safeName.split(/\s+/) }),
     tags,
   };
 }
