@@ -36,7 +36,9 @@ export function parseDuckDuckGo(html) {
 
 async function google(fetcher, query) {
   const items = await fetchFeed(fetcher, googleNewsUrl(query));
-  return items.map((i) => ({ query, engine: 'google-news', title: i.title.replace(/\s+-\s+[^-]+$/, ''), url: i.link, snippet: i.description }));
+  return items
+    .filter((i) => isHttpUrl(i.link))
+    .map((i) => ({ query, engine: 'google-news', title: String(i.title ?? '').replace(/\s+-\s+[^-]+$/, ''), url: i.link, snippet: i.description }));
 }
 
 async function duck(fetcher, query) {

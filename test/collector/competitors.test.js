@@ -45,3 +45,21 @@ test('all engines failing → not ok', async () => {
   const r = await collectCompetitorSignals({ name: 'Acme', industry: 'SaaS' }, { fetcher: fakeFetcher([]) });
   assert.equal(r.ok, false);
 });
+
+test('google news validates links and tolerates missing titles', async () => {
+  const badGnews = `<rss><channel>
+    <item><title>Valid item - Publisher</title><link>https://good.test/x</link><pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate></item>
+    <item><title>Bad link item - Publisher</title><link>javascript:alert(1)</link><pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate></item>
+    <item><link>https://no-title.test/y</link><pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate></item>
+  </channel></rss>`;
+  const fetcher = fakeFetcher([[/news\.google\.com/, { body: badGnews }], [/duckduckgo\.com/, { body: ddg }]]);
+  const r = await collectCompetitorSignals({ name: 'Acme', industry: 'SaaS' }, { fetcher });
+  assert.equal(r.ok, true);
+  const g = r.data.results.filter((x) => x.engine === 'google-news');
+  assert.equal(g.length, 6);
+  assert.equal(g[0].title, 'Valid item');
+  assert.equal(g[0].url, 'https://good.test/x');
+  assert.equal(g[1].title, '');
+  assert.equal(g[1].url, 'https://no-title.test/y');
+  assert.deepEqual(r.data.partial, []);
+});
