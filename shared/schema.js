@@ -17,11 +17,17 @@ export function normalizeWebsite(raw) {
   }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
   if (u.username || u.password) return null;
-  if (!u.hostname.includes('.') || /^[\d.]+$/.test(u.hostname) || u.hostname.startsWith('[')) return null;
+  let host = u.hostname;
+  // Strip trailing dot
+  if (host.endsWith('.')) host = host.slice(0, -1);
+  // Reject empty labels (e.g., '.com', 'a..com')
+  if (!host || host.includes('..') || host.startsWith('.') || host.endsWith('.')) return null;
+  if (!host.includes('.') || /^[\d.]+$/.test(host) || host.startsWith('[')) return null;
   return u.href;
 }
 
 export function validateInputs(raw = {}) {
+  raw = raw ?? {};
   const errors = {};
   const type = raw.type === 'competitor' ? 'competitor' : 'main';
   const parentId = raw.parentId ?? null;

@@ -59,3 +59,14 @@ test('id/key regexes and failedReport', () => {
   assert.equal(r.type, 'main');
   assert.deepEqual(r.competitors, []);
 });
+
+test('normalizeWebsite rejects hosts with empty labels', () => {
+  assert.equal(normalizeWebsite('http://.com'), null, 'leading dot');
+  assert.equal(normalizeWebsite('http://a..com'), null, 'double dot');
+});
+
+test('validateInputs tolerates null input', () => {
+  const r = validateInputs(null);
+  assert.equal(r.ok, false);
+  assert.ok(r.errors.name);
+});

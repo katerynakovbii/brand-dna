@@ -49,6 +49,18 @@ export function validateAi(obj) {
   if (!statement) return { ok: false, error: 'AI response missing statement' };
   if (!Array.isArray(obj.competitors)) return { ok: false, error: 'AI response missing competitors' };
   const sentiment = String(obj.newsSentiment ?? 'unknown').toLowerCase();
+
+  const validateWebsite = (w) => {
+    if (typeof w !== 'string' || w.trim().length === 0) return null;
+    if (w.length > 300) return null;
+    if (!isHttpUrl(w)) return null;
+    try {
+      return new URL(w).href;
+    } catch {
+      return null;
+    }
+  };
+
   return {
     ok: true,
     value: {
@@ -61,38 +73,61 @@ export function validateAi(obj) {
       competitors: obj.competitors
         .filter((c) => c && str(c.name, 80))
         .slice(0, 8)
-        .map((c) => ({ name: str(c.name, 80), website: isHttpUrl(c.website) ? c.website : null, reason: str(c.reason, 200) })),
+        .map((c) => ({ name: str(c.name, 80), website: validateWebsite(c.website), reason: str(c.reason, 200) })),
     },
   };
 }
 
 export async function runAi({ apiKey, prompt, fetchImpl = globalThis.fetch, timeoutMs = 60000 }) {
-  const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  let res;
+  try {
+    res = await fetchImpl('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: MODEL, max_tokens: 1500, messages: [{ role: 'user', content: prompt }] }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch {
+    throw new Error('AI request failed');
+  }
   if (!res.ok) throw new Error(`Anthropic API HTTP ${res.status}`);
   const body = await res.json();
-  const text = (body.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+  const text = (body?.content || []).filter((b) => b?.type === 'text').map((b) => b.text).join('');
   const v = validateAi(parseJsonLoose(text));
   if (!v.ok) throw new Error(v.error);
   return v.value;
 }
 
 export function mergeCompetitors(ranked, aiList, brand) {
-  if (!ranked?.length && !aiList?.length) return [];
-  const own = (brand ?? '').trim().toLowerCase();
+  const own = String(brand ?? '').trim().toLowerCase();
+
+  // Filter ranked to safe entries
+  const safeRanked = (ranked || []).filter((r) => r && typeof r === 'object' && typeof r.name === 'string' && r.name.trim());
+
+  // If no AI list, return filtered ranked with website validation
   if (!aiList?.length) {
-    return (ranked || []).slice(0, 5).map(({ name, website, reason, coMentions }) => ({ name, website, reason, coMentions }));
+    return safeRanked.slice(0, 5).map(({ name, website, reason, coMentions }) => ({
+      name,
+      website: isHttpUrl(website) ? website : null,
+      reason,
+      coMentions,
+    }));
   }
-  const byName = new Map((ranked || []).map((r) => [r.name.toLowerCase(), r]));
-  return aiList
-    .filter((c) => c && typeof c === 'object' && c.name && c.name.toLowerCase() !== own)
+
+  // Filter aiList to safe entries
+  const safeAi = (aiList || []).filter((c) => c && typeof c === 'object' && typeof c.name === 'string' && c.name.trim());
+
+  const byName = new Map(safeRanked.map((r) => [r.name.toLowerCase(), r]));
+  return safeAi
+    .filter((c) => c.name.toLowerCase() !== own)
     .slice(0, 5)
     .map((c) => {
       const r = byName.get(c.name.toLowerCase());
-      return { name: c.name, website: c.website ?? r?.website ?? null, reason: c.reason ?? r?.reason ?? '', coMentions: r?.coMentions ?? 0 };
+      return {
+        name: c.name,
+        website: isHttpUrl(c.website) ? c.website : (isHttpUrl(r?.website) ? r.website : null),
+        reason: c.reason ?? r?.reason ?? '',
+        coMentions: r?.coMentions ?? 0,
+      };
     });
 }
