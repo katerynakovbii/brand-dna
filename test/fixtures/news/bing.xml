@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel><title>Bing News</title>
+<item><title>Acme launches AI planner</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;aid=&amp;tid=1&amp;url=https%3a%2f%2fnewsite.test%2facme-ai&amp;c=1</link><description>Acme today announced an AI planner.</description><pubDate>Tue, 06 Oct 2026 08:00:00 GMT</pubDate></item>
+<item><title>Unrelated roadrunner cartoon news</title><link>http://www.bing.com/news/apiclick.aspx?url=https%3a%2f%2fother.test%2fx</link><description>Nothing here</description><pubDate>Mon, 05 Oct 2026 08:00:00 GMT</pubDate></item>
+</channel></rss>

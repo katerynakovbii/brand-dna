@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>"Acme" - Google News</title>
+<item><title>Acme raises Series B - TechDaily</title><link>https://news.google.com/rss/articles/abc1</link><pubDate>Sun, 04 Oct 2026 09:00:00 GMT</pubDate><source url="https://techdaily.test">TechDaily</source><description>&lt;a href="https://techdaily.test/x"&gt;Acme raises Series B&lt;/a&gt;</description></item>
+<item><title>Remote work tools compared: Acme vs Trello - WorkBlog</title><link>https://news.google.com/rss/articles/abc2</link><pubDate>Mon, 14 Sep 2026 12:00:00 GMT</pubDate><source url="https://workblog.test">WorkBlog</source></item>
+<item><title>Old Acme story - Archive</title><link>https://news.google.com/rss/articles/abc3</link><pubDate>Fri, 01 May 2026 12:00:00 GMT</pubDate><source url="https://archive.test">Archive</source></item>
+</channel></rss>
